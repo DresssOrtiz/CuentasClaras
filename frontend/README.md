@@ -1,5 +1,5 @@
 # Frontend
 
-Espacio reservado para la aplicacion frontend.
+Aplicacion base en React + Vite + TypeScript.
 
-Todavia no hay framework ni implementacion definidos en este repositorio.
+En esta etapa el frontend ya ofrece una primera experiencia visual navegable del producto, con vistas mock de inicio, historial, estadisticas, perfil y reporte IA.

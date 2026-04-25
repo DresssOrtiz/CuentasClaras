@@ -1,5 +1,5 @@
 # Backend
 
-Espacio reservado para la aplicacion backend.
+API base en FastAPI.
 
-Todavia no hay framework, endpoints ni modelos definitivos implementados.
+En este paso solo expone `GET /health` y queda preparada para conectarse mas adelante a PostgreSQL mediante variables de entorno.

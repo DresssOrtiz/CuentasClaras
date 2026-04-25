@@ -4,24 +4,25 @@ Cuentas Claras es una plataforma web orientada a personas naturales en Colombia,
 
 ## Estado actual del proyecto
 
-Este repositorio solo deja lista una base inicial de organizacion.
+Este repositorio ya cuenta con un esqueleto tecnico inicial para desarrollo local usando React, FastAPI, PostgreSQL y Docker Compose.
 
 ### Configurado en este paso
 
-- Estructura base de carpetas para frontend, backend, documentacion, infraestructura, base de datos y scripts.
-- Archivo `docker-compose.yml` con una instancia minima de PostgreSQL.
+- Frontend base en `frontend/` con React + Vite + TypeScript.
+- Backend base en `backend/` con FastAPI y endpoint `GET /health`.
+- `docker-compose.yml` con servicios para `postgres`, `backend` y `frontend`.
+- Conexion minima desde el frontend al backend para mostrar el estado de la API.
+- Interfaz visual navegable con vistas mock de inicio, historial, estadisticas, perfil y reporte IA.
 - Variables de entorno base en `.env.example`.
-- Archivos `README.md` y placeholders para orientar el crecimiento del proyecto.
 
 ### No implementado todavia
 
-- Frontend real.
-- Backend real.
 - Modelos de dominio definitivos.
-- Endpoints o API.
 - Autenticacion.
+- CRUD real.
 - Logica tributaria.
 - Integraciones externas.
+- Conexion funcional completa a PostgreSQL desde la aplicacion.
 
 ## Estructura del repositorio
 
@@ -44,20 +45,52 @@ Este repositorio solo deja lista una base inicial de organizacion.
 `-- docker-compose.yml
 ```
 
-## Levantar PostgreSQL con Docker
+## Servicios y puertos
+
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:8000`
+- Health check del backend: `http://localhost:8000/health`
+- PostgreSQL: `localhost:5432`
+
+## Levantar el proyecto
 
 1. Copia `.env.example` a `.env`.
 2. Ajusta los valores si lo necesitas.
 3. Ejecuta:
 
 ```bash
-docker compose up -d postgres
+docker compose up --build
 ```
 
-4. Para detener el servicio:
+4. Abre el frontend en:
+
+```text
+http://localhost:5173
+```
+
+Deberias ver el titulo `Cuentas Claras`, el texto `Proyecto base en construccion` y el estado de conexion con la API.
+Tambien deberias poder navegar entre las vistas base del producto con contenido visual mock.
+
+## Probar el backend
+
+Puedes abrir directamente:
+
+```text
+http://localhost:8000/health
+```
+
+O probarlo por consola:
+
+```bash
+curl http://localhost:8000/health
+```
+
+## Detener el proyecto
+
+Para detener los servicios:
 
 ```bash
 docker compose down
 ```
 
-El contenedor expone PostgreSQL en el puerto definido por `POSTGRES_PORT` y guarda los datos en un volumen persistente llamado `postgres_data`.
+PostgreSQL mantiene sus datos en el volumen persistente `postgres_data`.
