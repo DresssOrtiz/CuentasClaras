@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 
 class Settings:
@@ -11,6 +12,17 @@ class Settings:
     postgres_db: str = os.getenv("POSTGRES_DB", "cuentas_claras")
     postgres_user: str = os.getenv("POSTGRES_USER", "cuentas_claras_user")
     postgres_password: str = os.getenv("POSTGRES_PASSWORD", "change_me")
+    database_url: str = os.getenv(
+        "DATABASE_URL",
+        (
+            f"postgresql+psycopg://{postgres_user}:{postgres_password}"
+            f"@{postgres_host}:{postgres_port}/{postgres_db}"
+        ),
+    )
+    support_upload_dir: str = os.getenv(
+        "SUPPORT_UPLOAD_DIR",
+        str(Path("storage") / "supports"),
+    )
 
 
 settings = Settings()

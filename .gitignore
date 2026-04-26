@@ -25,3 +25,4 @@ __pycache__/
 # Database and local runtime leftovers
 *.sqlite
 tmp/
+storage/
