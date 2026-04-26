@@ -1,4 +1,5 @@
 export type MovementType = "income" | "expense";
+export type ReviewStatus = "pending" | "reviewed" | "flagged";
 
 export type Support = {
   id: number;
@@ -17,6 +18,8 @@ export type Movement = {
   amount: string;
   description: string;
   date: string;
+  review_status: ReviewStatus;
+  review_note: string | null;
   created_at: string;
   support: Support | null;
 };
@@ -30,6 +33,11 @@ export type MovementPayload = {
 };
 
 export type MovementUpdatePayload = MovementPayload;
+
+export type MovementReviewPayload = {
+  review_status: ReviewStatus;
+  review_note: string;
+};
 
 export type CategoryBreakdownItem = {
   category: string;
@@ -47,6 +55,17 @@ export type MovementStats = {
   movements_without_support: number;
   income_by_category: CategoryBreakdownItem[];
   expense_by_category: CategoryBreakdownItem[];
+};
+
+export type ReviewSummary = {
+  total_movements: number;
+  movements_with_support: number;
+  movements_without_support: number;
+  pending_movements: number;
+  reviewed_movements: number;
+  flagged_movements: number;
+  expenses_without_support: number;
+  ready_for_simple_review: number;
 };
 
 export type HealthResponse = {

@@ -8,6 +8,7 @@ from app.constants import CATEGORIES_BY_TYPE
 
 
 MovementType = Literal["income", "expense"]
+ReviewStatus = Literal["pending", "reviewed", "flagged"]
 
 
 class MovementCreate(BaseModel):
@@ -40,6 +41,8 @@ class MovementRead(BaseModel):
     amount: Decimal
     description: str
     date: date
+    review_status: ReviewStatus
+    review_note: str | None = None
     created_at: datetime
     support: "SupportRead | None" = None
 
@@ -63,6 +66,11 @@ class MovementUpdate(BaseModel):
             )
 
         return self
+
+
+class MovementReviewUpdate(BaseModel):
+    review_status: ReviewStatus
+    review_note: str | None = Field(default=None, max_length=500)
 
 
 class CategoryBreakdownItem(BaseModel):
@@ -93,3 +101,14 @@ class MovementStatsRead(BaseModel):
     movements_without_support: int
     income_by_category: list[CategoryBreakdownItem]
     expense_by_category: list[CategoryBreakdownItem]
+
+
+class ReviewSummaryRead(BaseModel):
+    total_movements: int
+    movements_with_support: int
+    movements_without_support: int
+    pending_movements: int
+    reviewed_movements: int
+    flagged_movements: int
+    expenses_without_support: int
+    ready_for_simple_review: int

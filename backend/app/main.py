@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.health import router as health_router
 from app.api.routes.movements import router as movements_router
+from app.api.routes.review import router as review_router
 from app.config import settings
 from app.database import create_db_and_tables, ensure_storage_dirs
 
@@ -28,3 +29,4 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(movements_router)
+app.include_router(review_router)

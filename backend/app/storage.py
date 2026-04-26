@@ -1,6 +1,6 @@
+import shutil
 from pathlib import Path
 from uuid import uuid4
-import shutil
 
 from fastapi import UploadFile
 
@@ -30,7 +30,15 @@ def save_support_file(upload: UploadFile) -> tuple[str, str]:
     return generated_filename, str(absolute_path)
 
 
-def delete_support_file(storage_path: str) -> None:
+def resolve_support_file_path(storage_path: str) -> Path:
     path = Path(storage_path)
+    if path.is_absolute():
+        return path
+
+    return Path.cwd() / path
+
+
+def delete_support_file(storage_path: str) -> None:
+    path = resolve_support_file_path(storage_path)
     if path.exists():
         path.unlink()

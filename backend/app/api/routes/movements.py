@@ -1,6 +1,8 @@
 from decimal import Decimal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -11,13 +13,15 @@ from app.schemas import (
     CategoryBreakdownItem,
     MovementCreate,
     MovementRead,
+    MovementReviewUpdate,
     MovementStatsRead,
-    SupportRead,
     MovementUpdate,
+    SupportRead,
 )
 from app.storage import (
     ALLOWED_SUPPORT_CONTENT_TYPES,
     delete_support_file,
+    resolve_support_file_path,
     save_support_file,
 )
 
@@ -49,7 +53,11 @@ def list_movements(db: Session = Depends(get_db)) -> list[Movement]:
 def update_movement(
     movement_id: int, payload: MovementUpdate, db: Session = Depends(get_db)
 ) -> Movement:
-    movement = db.get(Movement, movement_id)
+    movement = db.scalar(
+        select(Movement)
+        .options(selectinload(Movement.support))
+        .where(Movement.id == movement_id)
+    )
 
     if movement is None:
         raise HTTPException(
@@ -59,6 +67,30 @@ def update_movement(
 
     for field, value in payload.model_dump().items():
         setattr(movement, field, value)
+
+    db.commit()
+    db.refresh(movement)
+    return movement
+
+
+@router.patch("/{movement_id}/review", response_model=MovementRead)
+def update_movement_review(
+    movement_id: int, payload: MovementReviewUpdate, db: Session = Depends(get_db)
+) -> Movement:
+    movement = db.scalar(
+        select(Movement)
+        .options(selectinload(Movement.support))
+        .where(Movement.id == movement_id)
+    )
+
+    if movement is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Movement with id {movement_id} was not found.",
+        )
+
+    movement.review_status = payload.review_status
+    movement.review_note = payload.review_note.strip() if payload.review_note else None
 
     db.commit()
     db.refresh(movement)
@@ -87,7 +119,11 @@ def delete_movement(movement_id: int, db: Session = Depends(get_db)) -> Response
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{movement_id}/support", response_model=SupportRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{movement_id}/support",
+    response_model=SupportRead,
+    status_code=status.HTTP_201_CREATED,
+)
 def upload_support(
     movement_id: int,
     file: UploadFile = File(...),
@@ -132,25 +168,51 @@ def upload_support(
 
 @router.get("/{movement_id}/support", response_model=SupportRead)
 def get_support_metadata(movement_id: int, db: Session = Depends(get_db)) -> Support:
-    movement = db.scalar(
-        select(Movement)
-        .options(selectinload(Movement.support))
-        .where(Movement.id == movement_id)
+    return get_required_support(movement_id, db)
+
+
+@router.get("/{movement_id}/support/file")
+def get_support_file(movement_id: int, db: Session = Depends(get_db)) -> FileResponse:
+    support = get_required_support(movement_id, db)
+    file_path = resolve_support_file_path(support.storage_path)
+
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Support file for movement with id {movement_id} was not found.",
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type=support.content_type,
+        headers={
+            "Content-Disposition": build_content_disposition(
+                "inline", support.original_filename
+            )
+        },
     )
 
-    if movement is None:
+
+@router.get("/{movement_id}/support/download")
+def download_support_file(movement_id: int, db: Session = Depends(get_db)) -> FileResponse:
+    support = get_required_support(movement_id, db)
+    file_path = resolve_support_file_path(support.storage_path)
+
+    if not file_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Movement with id {movement_id} was not found.",
+            detail=f"Support file for movement with id {movement_id} was not found.",
         )
 
-    if movement.support is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Movement with id {movement_id} does not have a support.",
-        )
-
-    return movement.support
+    return FileResponse(
+        path=file_path,
+        media_type=support.content_type,
+        headers={
+            "Content-Disposition": build_content_disposition(
+                "attachment", support.original_filename
+            )
+        },
+    )
 
 
 @router.delete("/{movement_id}/support", status_code=status.HTTP_204_NO_CONTENT)
@@ -181,8 +243,9 @@ def delete_support(movement_id: int, db: Session = Depends(get_db)) -> Response:
 
 @router.get("/stats", response_model=MovementStatsRead)
 def get_movement_stats(db: Session = Depends(get_db)) -> MovementStatsRead:
-    statement = select(Movement)
-    movements = list(db.scalars(statement).all())
+    movements = list(
+        db.scalars(select(Movement).options(selectinload(Movement.support))).all()
+    )
 
     income_movements = [movement for movement in movements if movement.type == "income"]
     expense_movements = [movement for movement in movements if movement.type == "expense"]
@@ -224,3 +287,33 @@ def build_category_breakdown(
         )
 
     return breakdown
+
+
+def get_required_support(movement_id: int, db: Session) -> Support:
+    movement = db.scalar(
+        select(Movement)
+        .options(selectinload(Movement.support))
+        .where(Movement.id == movement_id)
+    )
+
+    if movement is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Movement with id {movement_id} was not found.",
+        )
+
+    if movement.support is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Movement with id {movement_id} does not have a support.",
+        )
+
+    return movement.support
+
+
+def build_content_disposition(disposition_type: str, filename: str) -> str:
+    quoted_filename = quote(filename)
+    return (
+        f'{disposition_type}; filename="{filename}"; '
+        f"filename*=UTF-8''{quoted_filename}"
+    )

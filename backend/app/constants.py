@@ -9,10 +9,16 @@ EXPENSE_CATEGORIES = [
     "Hogar",
     "Transporte",
     "Salud",
-    "Educación",
-    "Alimentación",
+    "Educacion",
+    "Alimentacion",
     "Servicios",
     "Otros gastos",
+]
+
+REVIEW_STATUSES = [
+    "pending",
+    "reviewed",
+    "flagged",
 ]
 
 CATEGORIES_BY_TYPE = {

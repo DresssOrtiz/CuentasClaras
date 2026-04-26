@@ -16,6 +16,8 @@ Este repositorio ya cuenta con un esqueleto tecnico inicial para desarrollo loca
 - Flujo funcional real para registrar, consultar, editar y eliminar movimientos en PostgreSQL.
 - Endpoint real de estadisticas para totales, desglose por categoria y conteo de soportes.
 - Soporte real por movimiento con carga de PDF o imagen, metadata en PostgreSQL y archivo guardado localmente.
+- Consulta real del archivo de soporte para verlo y descargarlo desde la aplicacion.
+- Revision manual real por movimiento con estado, nota y resumen del expediente.
 - Variables de entorno base en `.env.example`.
 
 ### No implementado todavia
@@ -54,7 +56,10 @@ Este repositorio ya cuenta con un esqueleto tecnico inicial para desarrollo loca
 - Health check del backend: `http://localhost:8000/health`
 - Movimientos: `http://localhost:8000/movements`
 - Estadisticas: `http://localhost:8000/movements/stats`
+- Resumen de revision: `http://localhost:8000/review/summary`
 - Soporte por movimiento: `http://localhost:8000/movements/{movement_id}/support`
+- Archivo del soporte: `http://localhost:8000/movements/{movement_id}/support/file`
+- Descarga del soporte: `http://localhost:8000/movements/{movement_id}/support/download`
 - PostgreSQL: `localhost:5432`
 
 ## Levantar el proyecto
@@ -121,9 +126,13 @@ Endpoints disponibles en este paso:
 - `PUT /movements/{movement_id}`
 - `DELETE /movements/{movement_id}`
 - `GET /movements/stats`
+- `PATCH /movements/{movement_id}/review`
 - `POST /movements/{movement_id}/support`
 - `GET /movements/{movement_id}/support`
 - `DELETE /movements/{movement_id}/support`
+- `GET /movements/{movement_id}/support/file`
+- `GET /movements/{movement_id}/support/download`
+- `GET /review/summary`
 
 ## Categorias disponibles en esta etapa
 
@@ -155,6 +164,37 @@ Gastos:
 http://localhost:8000/movements/stats
 ```
 
+## Estados de revision en esta etapa
+
+- `pending`: movimiento aun no revisado
+- `reviewed`: movimiento revisado sin problema basico visible
+- `flagged`: movimiento con observacion o algo por revisar
+
+El campo `review_note` permite guardar una nota breve de revision.
+
+## Probar revision manual
+
+1. Abre `http://localhost:5173`.
+2. Ve a `Historial`.
+3. En cualquier movimiento, cambia el selector de revision.
+4. Si lo necesitas, agrega una nota breve.
+5. Usa `Guardar revision`.
+6. Verifica que el dashboard cambia su checklist real.
+
+Ejemplo de actualizacion por API:
+
+```bash
+curl -X PATCH http://localhost:8000/movements/1/review \
+  -H "Content-Type: application/json" \
+  -d "{\"review_status\":\"flagged\",\"review_note\":\"Falta validar el soporte\"}"
+```
+
+Resumen real del expediente:
+
+```text
+http://localhost:8000/review/summary
+```
+
 ## Probar soportes
 
 Tipos de archivo aceptados en esta etapa:
@@ -176,7 +216,9 @@ Desde el frontend:
 3. En un movimiento, usa `Adjuntar soporte`.
 4. Selecciona un PDF o imagen valida.
 5. Confirma que el estado cambia a `Con soporte` y que aparece el nombre del archivo.
-6. Si quieres retirarlo, usa `Eliminar soporte`.
+6. Usa `Ver soporte` para abrirlo.
+7. Usa `Descargar` para guardarlo localmente.
+8. Si quieres retirarlo, usa `Eliminar soporte`.
 
 Desde el backend:
 
@@ -190,8 +232,18 @@ curl http://localhost:8000/movements/1/support
 ```
 
 ```bash
+curl http://localhost:8000/movements/1/support/file
+```
+
+```bash
+curl -OJ http://localhost:8000/movements/1/support/download
+```
+
+```bash
 curl -X DELETE http://localhost:8000/movements/1/support
 ```
+
+Si el movimiento no existe, no tiene soporte o el archivo fisico ya no esta disponible, el backend responde con `404`.
 
 ## Probar edicion y eliminacion
 

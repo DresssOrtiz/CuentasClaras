@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import { CATEGORIES_BY_TYPE } from "./constants";
+import { CATEGORIES_BY_TYPE, REVIEW_STATUS_OPTIONS } from "./constants";
 import { MetricCard, PanelCard, StatusPill } from "./components/ui";
-import { aiHighlights, monthlyBars, profileSections, quickActions, taxChecklist } from "./data/mockData";
+import { aiHighlights, monthlyBars, profileSections, quickActions } from "./data/mockData";
 import {
   createMovement,
   deleteMovement,
   deleteMovementSupport,
   fetchHealth as getHealth,
   fetchMovements,
+  fetchReviewSummary,
+  fetchMovementSupportFile,
   fetchMovementStats,
   uploadMovementSupport,
+  updateMovementReview,
   updateMovement,
 } from "./lib/api";
 import type {
@@ -18,9 +21,12 @@ import type {
   HealthResponse,
   Movement,
   MovementPayload,
+  MovementReviewPayload,
   MovementStats,
   MovementType,
   MovementUpdatePayload,
+  ReviewStatus,
+  ReviewSummary,
 } from "./types";
 
 type ViewId = "inicio" | "historial" | "estadisticas" | "perfil" | "reporte-ia";
@@ -49,14 +55,20 @@ export default function App() {
   const [stats, setStats] = useState<MovementStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [reviewSummary, setReviewSummary] = useState<ReviewSummary | null>(null);
+  const [reviewSummaryError, setReviewSummaryError] = useState<string | null>(null);
+  const [loadingReviewSummary, setLoadingReviewSummary] = useState(true);
   const [submittingMovement, setSubmittingMovement] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [historyMessage, setHistoryMessage] = useState<string | null>(null);
   const [editingMovement, setEditingMovement] = useState<Movement | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [savingReviewId, setSavingReviewId] = useState<number | null>(null);
   const [deletingMovementId, setDeletingMovementId] = useState<number | null>(null);
   const [uploadingSupportId, setUploadingSupportId] = useState<number | null>(null);
   const [deletingSupportId, setDeletingSupportId] = useState<number | null>(null);
+  const [viewingSupportId, setViewingSupportId] = useState<number | null>(null);
+  const [downloadingSupportId, setDownloadingSupportId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchHealth = async () => {
@@ -79,6 +91,7 @@ export default function App() {
   useEffect(() => {
     void loadMovements();
     void loadStats();
+    void loadReviewSummary();
   }, []);
 
   const apiStatus = useMemo(() => {
@@ -107,11 +120,13 @@ export default function App() {
       movementCount: String(totalMovements),
       draftProgress:
         totalMovements === 0 ? "0%" : `${Math.min(95, 30 + totalMovements * 12)}%`,
-      pendingReview: totalExpenseMovements,
+      pendingReview: reviewSummary?.pending_movements ?? totalExpenseMovements,
+      reviewedCount: reviewSummary?.reviewed_movements ?? 0,
+      flaggedCount: reviewSummary?.flagged_movements ?? 0,
       supportCount: stats?.movements_with_support ?? 0,
       withoutSupportCount: stats?.movements_without_support ?? totalMovements,
     };
-  }, [movements, stats]);
+  }, [movements, reviewSummary, stats]);
 
   async function loadMovements() {
     setLoadingMovements(true);
@@ -151,6 +166,25 @@ export default function App() {
     }
   }
 
+  async function loadReviewSummary() {
+    setLoadingReviewSummary(true);
+    setReviewSummaryError(null);
+
+    try {
+      const data = await fetchReviewSummary();
+      setReviewSummary(data);
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "No fue posible consultar el resumen de revision";
+
+      setReviewSummaryError(message);
+    } finally {
+      setLoadingReviewSummary(false);
+    }
+  }
+
   async function handleCreateMovement(payload: MovementPayload): Promise<boolean> {
     setSubmittingMovement(true);
     setSubmitMessage(null);
@@ -162,8 +196,7 @@ export default function App() {
           ? "Ingreso registrado correctamente."
           : "Gasto registrado correctamente.",
       );
-      await loadMovements();
-      await loadStats();
+      await refreshMovementData();
       setActiveView("historial");
       return true;
     } catch (requestError) {
@@ -180,7 +213,7 @@ export default function App() {
   }
 
   async function refreshMovementData() {
-    await Promise.all([loadMovements(), loadStats()]);
+    await Promise.all([loadMovements(), loadStats(), loadReviewSummary()]);
   }
 
   async function handleUpdateMovement(
@@ -240,6 +273,31 @@ export default function App() {
     }
   }
 
+  async function handleUpdateMovementReview(
+    movement: Movement,
+    payload: MovementReviewPayload,
+  ): Promise<boolean> {
+    setSavingReviewId(movement.id);
+    setHistoryMessage(null);
+
+    try {
+      await updateMovementReview(movement.id, payload);
+      await refreshMovementData();
+      setHistoryMessage("Revision actualizada correctamente.");
+      return true;
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "No fue posible actualizar la revision";
+
+      setHistoryMessage(message);
+      return false;
+    } finally {
+      setSavingReviewId(null);
+    }
+  }
+
   async function handleUploadSupport(movement: Movement, file: File) {
     setUploadingSupportId(movement.id);
     setHistoryMessage(null);
@@ -289,6 +347,54 @@ export default function App() {
       setHistoryMessage(message);
     } finally {
       setDeletingSupportId(null);
+    }
+  }
+
+  async function handleViewSupport(movement: Movement) {
+    setViewingSupportId(movement.id);
+    setHistoryMessage(null);
+
+    try {
+      const supportFile = await fetchMovementSupportFile(movement.id, "view");
+      const objectUrl = URL.createObjectURL(supportFile.blob);
+      window.open(objectUrl, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "No fue posible abrir el soporte";
+
+      setHistoryMessage(message);
+    } finally {
+      setViewingSupportId(null);
+    }
+  }
+
+  async function handleDownloadSupport(movement: Movement) {
+    setDownloadingSupportId(movement.id);
+    setHistoryMessage(null);
+
+    try {
+      const supportFile = await fetchMovementSupportFile(movement.id, "download");
+      const objectUrl = URL.createObjectURL(supportFile.blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = supportFile.filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      setHistoryMessage("Soporte descargado correctamente.");
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "No fue posible descargar el soporte";
+
+      setHistoryMessage(message);
+    } finally {
+      setDownloadingSupportId(null);
     }
   }
 
@@ -358,6 +464,9 @@ export default function App() {
             stats,
             statsError,
             loadingStats,
+            reviewSummary,
+            reviewSummaryError,
+            loadingReviewSummary,
             onCreateMovement: handleCreateMovement,
             submittingMovement,
             submitMessage,
@@ -365,13 +474,19 @@ export default function App() {
             onStartEditMovement: setEditingMovement,
             onCancelEditMovement: () => setEditingMovement(null),
             onUpdateMovement: handleUpdateMovement,
+            onUpdateMovementReview: handleUpdateMovementReview,
             onDeleteMovement: handleDeleteMovement,
             savingEdit,
+            savingReviewId,
             deletingMovementId,
             uploadingSupportId,
             deletingSupportId,
+            viewingSupportId,
+            downloadingSupportId,
             historyMessage,
             onUploadSupport: handleUploadSupport,
+            onViewSupport: handleViewSupport,
+            onDownloadSupport: handleDownloadSupport,
             onDeleteSupport: handleDeleteSupport,
           })}
         </section>
@@ -421,6 +536,9 @@ function renderView({
   stats,
   statsError,
   loadingStats,
+  reviewSummary,
+  reviewSummaryError,
+  loadingReviewSummary,
   onCreateMovement,
   submittingMovement,
   submitMessage,
@@ -428,13 +546,19 @@ function renderView({
   onStartEditMovement,
   onCancelEditMovement,
   onUpdateMovement,
+  onUpdateMovementReview,
   onDeleteMovement,
   savingEdit,
+  savingReviewId,
   deletingMovementId,
   uploadingSupportId,
   deletingSupportId,
+  viewingSupportId,
+  downloadingSupportId,
   historyMessage,
   onUploadSupport,
+  onViewSupport,
+  onDownloadSupport,
   onDeleteSupport,
 }: {
   view: ViewId;
@@ -445,6 +569,10 @@ function renderView({
     movementCount: string;
     draftProgress: string;
     pendingReview: number;
+    supportCount?: number;
+    withoutSupportCount?: number;
+    reviewedCount?: number;
+    flaggedCount?: number;
   };
   movements: Movement[];
   movementsError: string | null;
@@ -452,6 +580,9 @@ function renderView({
   stats: MovementStats | null;
   statsError: string | null;
   loadingStats: boolean;
+  reviewSummary: ReviewSummary | null;
+  reviewSummaryError: string | null;
+  loadingReviewSummary: boolean;
   onCreateMovement: (payload: MovementPayload) => Promise<boolean>;
   submittingMovement: boolean;
   submitMessage: string | null;
@@ -459,13 +590,22 @@ function renderView({
   onStartEditMovement: (movement: Movement | null) => void;
   onCancelEditMovement: () => void;
   onUpdateMovement: (movementId: number, payload: MovementUpdatePayload) => Promise<boolean>;
+  onUpdateMovementReview: (
+    movement: Movement,
+    payload: MovementReviewPayload,
+  ) => Promise<boolean>;
   onDeleteMovement: (movement: Movement) => Promise<void>;
   savingEdit: boolean;
+  savingReviewId: number | null;
   deletingMovementId: number | null;
   uploadingSupportId: number | null;
   deletingSupportId: number | null;
+  viewingSupportId: number | null;
+  downloadingSupportId: number | null;
   historyMessage: string | null;
   onUploadSupport: (movement: Movement, file: File) => Promise<void>;
+  onViewSupport: (movement: Movement) => Promise<void>;
+  onDownloadSupport: (movement: Movement) => Promise<void>;
   onDeleteSupport: (movement: Movement) => Promise<void>;
 }) {
   switch (view) {
@@ -474,6 +614,9 @@ function renderView({
         <HomeView
           apiStatus={apiStatus}
           movementSummary={movementSummary}
+          reviewSummary={reviewSummary}
+          reviewSummaryError={reviewSummaryError}
+          loadingReviewSummary={loadingReviewSummary}
           onCreateMovement={onCreateMovement}
           submittingMovement={submittingMovement}
           submitMessage={submitMessage}
@@ -489,13 +632,19 @@ function renderView({
           onStartEditMovement={onStartEditMovement}
           onCancelEditMovement={onCancelEditMovement}
           onUpdateMovement={onUpdateMovement}
+          onUpdateMovementReview={onUpdateMovementReview}
           onDeleteMovement={onDeleteMovement}
           savingEdit={savingEdit}
+          savingReviewId={savingReviewId}
           deletingMovementId={deletingMovementId}
           uploadingSupportId={uploadingSupportId}
           deletingSupportId={deletingSupportId}
+          viewingSupportId={viewingSupportId}
+          downloadingSupportId={downloadingSupportId}
           historyMessage={historyMessage}
           onUploadSupport={onUploadSupport}
+          onViewSupport={onViewSupport}
+          onDownloadSupport={onDownloadSupport}
           onDeleteSupport={onDeleteSupport}
         />
       );
@@ -516,6 +665,9 @@ function renderView({
         <HomeView
           apiStatus={apiStatus}
           movementSummary={movementSummary}
+          reviewSummary={reviewSummary}
+          reviewSummaryError={reviewSummaryError}
+          loadingReviewSummary={loadingReviewSummary}
           onCreateMovement={onCreateMovement}
           submittingMovement={submittingMovement}
           submitMessage={submitMessage}
@@ -527,6 +679,9 @@ function renderView({
 function HomeView({
   apiStatus,
   movementSummary,
+  reviewSummary,
+  reviewSummaryError,
+  loadingReviewSummary,
   onCreateMovement,
   submittingMovement,
   submitMessage,
@@ -540,7 +695,12 @@ function HomeView({
     pendingReview: number;
     supportCount?: number;
     withoutSupportCount?: number;
+    reviewedCount?: number;
+    flaggedCount?: number;
   };
+  reviewSummary: ReviewSummary | null;
+  reviewSummaryError: string | null;
+  loadingReviewSummary: boolean;
   onCreateMovement: (payload: MovementPayload) => Promise<boolean>;
   submittingMovement: boolean;
   submitMessage: string | null;
@@ -641,10 +801,14 @@ function HomeView({
               historial consolidado.
             </p>
             <ul className="mini-list">
-              <li>{movementSummary.pendingReview} gastos requieren seguimiento visual.</li>
+              <li>{movementSummary.pendingReview} movimientos siguen pendientes de revision.</li>
               <li>
                 {movementSummary.supportCount ?? 0} movimientos con soporte y{" "}
                 {movementSummary.withoutSupportCount ?? 0} sin soporte.
+              </li>
+              <li>
+                {movementSummary.reviewedCount ?? 0} revisados y{" "}
+                {movementSummary.flaggedCount ?? 0} observados.
               </li>
               <li>El historial se alimenta desde PostgreSQL.</li>
               <li>{apiStatus}</li>
@@ -681,19 +845,46 @@ function HomeView({
               <h3>Seguimiento inmediato</h3>
             </div>
           </div>
-          <div className="checklist">
-            {taxChecklist.map((item) => (
-              <div key={item.title} className="check-item">
+          {loadingReviewSummary ? <p className="empty-state">Cargando resumen de revision...</p> : null}
+          {reviewSummaryError ? <p className="empty-state">{reviewSummaryError}</p> : null}
+          {reviewSummary ? (
+            <div className="checklist">
+              <div className="check-item">
                 <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.description}</p>
+                  <strong>Movimientos sin soporte</strong>
+                  <p>Registros que aun no tienen evidencia adjunta.</p>
                 </div>
-                <StatusPill tone={item.done ? "success" : "warning"}>
-                  {item.done ? "Listo" : "Pendiente"}
+                <StatusPill tone={reviewSummary.movements_without_support > 0 ? "warning" : "success"}>
+                  {reviewSummary.movements_without_support}
                 </StatusPill>
               </div>
-            ))}
-          </div>
+              <div className="check-item">
+                <div>
+                  <strong>Pendientes de revision</strong>
+                  <p>Movimientos que todavia no han sido revisados manualmente.</p>
+                </div>
+                <StatusPill tone={reviewSummary.pending_movements > 0 ? "warning" : "success"}>
+                  {reviewSummary.pending_movements}
+                </StatusPill>
+              </div>
+              <div className="check-item">
+                <div>
+                  <strong>Movimientos observados</strong>
+                  <p>Registros marcados con observacion o seguimiento.</p>
+                </div>
+                <StatusPill tone={reviewSummary.flagged_movements > 0 ? "danger" : "success"}>
+                  {reviewSummary.flagged_movements}
+                </StatusPill>
+              </div>
+              <div className="check-item">
+                <div>
+                  <strong>Listos para revision simple</strong>
+                  <p>Movimientos que ya cuentan con soporte y pueden revisarse.</p>
+                </div>
+                <StatusPill tone="info">{reviewSummary.ready_for_simple_review}</StatusPill>
+              </div>
+            </div>
+          ) : null}
         </PanelCard>
       </div>
     </div>
@@ -708,13 +899,19 @@ function HistoryView({
   onStartEditMovement,
   onCancelEditMovement,
   onUpdateMovement,
+  onUpdateMovementReview,
   onDeleteMovement,
   savingEdit,
+  savingReviewId,
   deletingMovementId,
   uploadingSupportId,
   deletingSupportId,
+  viewingSupportId,
+  downloadingSupportId,
   historyMessage,
   onUploadSupport,
+  onViewSupport,
+  onDownloadSupport,
   onDeleteSupport,
 }: {
   loadingMovements: boolean;
@@ -724,21 +921,32 @@ function HistoryView({
   onStartEditMovement: (movement: Movement | null) => void;
   onCancelEditMovement: () => void;
   onUpdateMovement: (movementId: number, payload: MovementUpdatePayload) => Promise<boolean>;
+  onUpdateMovementReview: (
+    movement: Movement,
+    payload: MovementReviewPayload,
+  ) => Promise<boolean>;
   onDeleteMovement: (movement: Movement) => Promise<void>;
   savingEdit: boolean;
+  savingReviewId: number | null;
   deletingMovementId: number | null;
   uploadingSupportId: number | null;
   deletingSupportId: number | null;
+  viewingSupportId: number | null;
+  downloadingSupportId: number | null;
   historyMessage: string | null;
   onUploadSupport: (movement: Movement, file: File) => Promise<void>;
+  onViewSupport: (movement: Movement) => Promise<void>;
+  onDownloadSupport: (movement: Movement) => Promise<void>;
   onDeleteSupport: (movement: Movement) => Promise<void>;
 }) {
+  const [expandedMovementId, setExpandedMovementId] = useState<number | null>(null);
+
   return (
     <div className="stack-layout">
       {editingMovement ? (
         <MovementFormCard
           title="Editar movimiento"
-          sectionTag="Edición"
+          sectionTag="Edicion"
           submitLabel="Guardar cambios"
           initialMovement={editingMovement}
           onSubmit={(payload) => onUpdateMovement(editingMovement.id, payload)}
@@ -770,93 +978,269 @@ function HistoryView({
         {!loadingMovements && !movementsError && movements.length > 0 ? (
           <div className="history-table">
             <div className="history-head">
+              <span />
               <span>Fecha</span>
               <span>Concepto</span>
               <span>Categoria</span>
               <span>Tipo</span>
               <span>Soporte</span>
+              <span>Revision</span>
               <span>Valor</span>
+              <span>Acciones</span>
             </div>
-            {movements.map((movement) => (
-              <div key={movement.id} className="history-row">
-                <span>{formatDate(movement.date)}</span>
-                <strong>{movement.description}</strong>
-                <span>{movement.category}</span>
-                <StatusPill tone={movement.type === "income" ? "success" : "warning"}>
-                  {movement.type === "income" ? "Ingreso" : "Gasto"}
-                </StatusPill>
-                <div className="support-cell">
-                  <StatusPill tone={movement.support ? "success" : "neutral"}>
-                    {movement.support ? "Con soporte" : "Sin soporte"}
-                  </StatusPill>
-                  <small className="support-meta">
-                    {movement.support
-                      ? `${movement.support.original_filename} · ${readableContentType(movement.support.content_type)}`
-                      : "Adjunta una imagen o PDF"}
-                  </small>
-                  <div className="inline-actions">
-                    <label className="inline-action-button">
-                      {uploadingSupportId === movement.id
-                        ? "Subiendo..."
-                        : movement.support
-                          ? "Reemplazar soporte"
-                          : "Adjuntar soporte"}
-                      <input
-                        type="file"
-                        className="visually-hidden"
-                        accept=".pdf,image/png,image/jpeg,image/webp"
-                        disabled={uploadingSupportId === movement.id}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) {
-                            void onUploadSupport(movement, file);
-                          }
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                    {movement.support ? (
+            {movements.map((movement) => {
+              const isExpanded = expandedMovementId === movement.id;
+
+              return (
+                <article
+                  key={movement.id}
+                  className={`history-card ${isExpanded ? "expanded" : ""}`}
+                >
+                  <div className="history-row">
+                    <button
+                      type="button"
+                      className="expand-icon-button"
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? "Colapsar movimiento" : "Expandir movimiento"}
+                      onClick={() =>
+                        setExpandedMovementId((current) =>
+                          current === movement.id ? null : movement.id,
+                        )
+                      }
+                    >
+                      <svg
+                        viewBox="0 0 20 20"
+                        aria-hidden="true"
+                        className={`expand-icon ${isExpanded ? "expanded" : ""}`}
+                      >
+                        <path
+                          d="M5.5 11.5 10 7l4.5 4.5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                    <span>{formatDate(movement.date)}</span>
+                    <strong>{movement.description}</strong>
+                    <span>{movement.category}</span>
+                    <StatusPill tone={movement.type === "income" ? "success" : "warning"}>
+                      {movement.type === "income" ? "Ingreso" : "Gasto"}
+                    </StatusPill>
+                    <StatusPill tone={movement.support ? "success" : "neutral"}>
+                      {movement.support ? "Con soporte" : "Sin soporte"}
+                    </StatusPill>
+                    <StatusPill tone={reviewTone(movement.review_status)}>
+                      {reviewLabel(movement.review_status)}
+                    </StatusPill>
+                    <span className={movement.type === "income" ? "income" : "expense"}>
+                      {movement.type === "income" ? "+" : "-"}
+                      {formatCurrency(Number(movement.amount))}
+                    </span>
+                    <div className="history-summary-actions">
                       <button
                         type="button"
-                        className="inline-action-button danger"
-                        disabled={deletingSupportId === movement.id}
-                        onClick={() => void onDeleteSupport(movement)}
+                        className="expand-button"
+                        aria-expanded={isExpanded}
+                        onClick={() =>
+                          setExpandedMovementId((current) =>
+                            current === movement.id ? null : movement.id,
+                          )
+                        }
                       >
-                        {deletingSupportId === movement.id
-                          ? "Quitando..."
-                          : "Eliminar soporte"}
+                        {isExpanded ? "Ocultar detalles" : "Ver detalles"}
                       </button>
-                    ) : null}
+                      <button
+                        type="button"
+                        className="row-menu-button"
+                        aria-label="Opciones del movimiento"
+                        onClick={() =>
+                          setExpandedMovementId((current) =>
+                            current === movement.id ? null : movement.id,
+                          )
+                        }
+                      >
+                        ...
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="history-actions-cell">
-                  <span className={movement.type === "income" ? "income" : "expense"}>
-                    {movement.type === "income" ? "+" : "-"}
-                    {formatCurrency(Number(movement.amount))}
-                  </span>
-                  <div className="inline-actions">
-                    <button
-                      type="button"
-                      className="inline-action-button"
-                      onClick={() => onStartEditMovement(movement)}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-action-button danger"
-                      onClick={() => void onDeleteMovement(movement)}
-                      disabled={deletingMovementId === movement.id}
-                    >
-                      {deletingMovementId === movement.id ? "Eliminando..." : "Eliminar"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+
+                  {isExpanded ? (
+                    <div className="history-details">
+                      <section className="detail-section">
+                        <span className="section-tag">Soporte</span>
+                        <h4>Archivo y acciones</h4>
+                        <div className="detail-support-meta">
+                          <strong>
+                            {movement.support
+                              ? movement.support.original_filename
+                              : "Sin soporte adjunto"}
+                          </strong>
+                          <small>
+                            {movement.support
+                              ? readableContentType(movement.support.content_type)
+                              : "Adjunta una imagen o PDF para continuar"}
+                          </small>
+                        </div>
+                        <div className="inline-actions detail-actions">
+                          {movement.support ? (
+                            <>
+                              <button
+                                type="button"
+                                className="inline-action-button"
+                                disabled={viewingSupportId === movement.id}
+                                onClick={() => void onViewSupport(movement)}
+                              >
+                                {viewingSupportId === movement.id
+                                  ? "Abriendo..."
+                                  : "Ver soporte"}
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-action-button"
+                                disabled={downloadingSupportId === movement.id}
+                                onClick={() => void onDownloadSupport(movement)}
+                              >
+                                {downloadingSupportId === movement.id
+                                  ? "Descargando..."
+                                  : "Descargar"}
+                              </button>
+                            </>
+                          ) : null}
+                          <label className="inline-action-button">
+                            {uploadingSupportId === movement.id
+                              ? "Subiendo..."
+                              : movement.support
+                                ? "Reemplazar soporte"
+                                : "Adjuntar soporte"}
+                            <input
+                              type="file"
+                              className="visually-hidden"
+                              accept=".pdf,image/png,image/jpeg,image/webp"
+                              disabled={uploadingSupportId === movement.id}
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) {
+                                  void onUploadSupport(movement, file);
+                                }
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                          {movement.support ? (
+                            <button
+                              type="button"
+                              className="inline-action-button danger"
+                              disabled={deletingSupportId === movement.id}
+                              onClick={() => void onDeleteSupport(movement)}
+                            >
+                              {deletingSupportId === movement.id
+                                ? "Quitando..."
+                                : "Eliminar soporte"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </section>
+
+                      <section className="detail-section detail-section-review">
+                        <span className="section-tag">Revision</span>
+                        <h4>Estado y nota breve</h4>
+                        <ReviewEditor
+                          movement={movement}
+                          saving={savingReviewId === movement.id}
+                          onSubmit={onUpdateMovementReview}
+                        />
+                      </section>
+
+                      <section className="detail-section detail-section-actions">
+                        <span className="section-tag">Acciones del movimiento</span>
+                        <h4>Gestion del registro</h4>
+                        <div className="inline-actions detail-actions movement-actions">
+                          <button
+                            type="button"
+                            className="inline-action-button"
+                            onClick={() => onStartEditMovement(movement)}
+                          >
+                            Editar movimiento
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-action-button danger"
+                            onClick={() => void onDeleteMovement(movement)}
+                            disabled={deletingMovementId === movement.id}
+                          >
+                            {deletingMovementId === movement.id
+                              ? "Eliminando..."
+                              : "Eliminar movimiento"}
+                          </button>
+                        </div>
+                      </section>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
         ) : null}
       </PanelCard>
+    </div>
+  );
+}
+
+function ReviewEditor({
+  movement,
+  saving,
+  onSubmit,
+}: {
+  movement: Movement;
+  saving: boolean;
+  onSubmit: (movement: Movement, payload: MovementReviewPayload) => Promise<boolean>;
+}) {
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(movement.review_status);
+  const [reviewNote, setReviewNote] = useState(movement.review_note ?? "");
+
+  useEffect(() => {
+    setReviewStatus(movement.review_status);
+    setReviewNote(movement.review_note ?? "");
+  }, [movement.review_note, movement.review_status]);
+
+  return (
+    <div className="review-cell">
+      <select
+        className="review-select"
+        value={reviewStatus}
+        onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}
+        disabled={saving}
+      >
+        {REVIEW_STATUS_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <textarea
+        className="review-note"
+        value={reviewNote}
+        onChange={(event) => setReviewNote(event.target.value)}
+        placeholder="Nota breve de revision"
+        rows={2}
+        disabled={saving}
+      />
+      <button
+        type="button"
+        className="inline-action-button"
+        disabled={saving}
+        onClick={() =>
+          void onSubmit(movement, {
+            review_status: reviewStatus,
+            review_note: reviewNote,
+          })
+        }
+      >
+        {saving ? "Guardando..." : "Guardar revision"}
+      </button>
     </div>
   );
 }
@@ -1340,6 +1724,32 @@ function readableContentType(contentType: string): string {
   }
 
   return contentType;
+}
+
+function reviewLabel(status: ReviewStatus): string {
+  switch (status) {
+    case "reviewed":
+      return "Revisado";
+    case "flagged":
+      return "Observado";
+    case "pending":
+    default:
+      return "Pendiente";
+  }
+}
+
+function reviewTone(
+  status: ReviewStatus,
+): "success" | "warning" | "danger" | "info" | "accent" | "neutral" {
+  switch (status) {
+    case "reviewed":
+      return "success";
+    case "flagged":
+      return "danger";
+    case "pending":
+    default:
+      return "warning";
+  }
 }
 
 function todayString(): string {
