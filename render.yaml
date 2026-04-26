@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: cuentas-claras-staging-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_NAME
+        value: Cuentas Claras API
+      - key: APP_ENV
+        value: staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cuentas-claras-staging-db
+          property: connectionString
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          name: cuentas-claras-staging-frontend
+          type: web
+          property: host
+      - key: AUTH_SECRET_KEY
+        generateValue: true
+      - key: SUPPORT_STORAGE_PATH
+        value: /opt/render/project/src/storage/supports
+    disk:
+      name: support-storage
+      mountPath: /opt/render/project/src/storage
+      sizeGB: 10
+
+  - type: web
+    name: cuentas-claras-staging-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: cuentas-claras-staging-backend
+          type: web
+          property: host
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: cuentas-claras-staging-db
+    databaseName: cuentas_claras_staging
+    postgresMajorVersion: "16"
+    ipAllowList: []
