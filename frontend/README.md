@@ -2,6 +2,11 @@
 
 Aplicacion base en React + Vite + TypeScript.
 
+Preparado para correr:
+
+- en local con Docker Compose
+- en Render como `Static Site`
+
 En esta etapa el frontend ofrece una primera experiencia visual navegable del producto, con vistas de inicio, historial, estadisticas, perfil y reporte IA.
 
 El flujo real implementado en este paso permite:
@@ -15,6 +20,10 @@ El flujo real implementado en este paso permite:
 - mostrar algunos totales reales en el dashboard
 - mostrar estadisticas reales por categoria en `Estadisticas`
 - mostrar un checklist real en `Inicio` segun el resumen de revision
+
+Variable relevante para despliegue:
+
+- `VITE_API_URL`: URL base del backend. En staging debe apuntar al dominio publico del backend de Render.
 
 Soportes en esta etapa:
 

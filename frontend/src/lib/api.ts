@@ -9,7 +9,7 @@ import type {
   MovementUpdatePayload,
 } from "../types";
 
-const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const apiUrl = normalizeBaseUrl(import.meta.env.VITE_API_URL ?? "http://localhost:8000");
 
 export type SupportFileResponse = {
   blob: Blob;
@@ -221,4 +221,14 @@ function extractFilename(contentDisposition: string): string | null {
   }
 
   return null;
+}
+
+function normalizeBaseUrl(value: string): string {
+  const normalized = value.trim().replace(/\/+$/, "");
+
+  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+    return normalized;
+  }
+
+  return `https://${normalized}`;
 }

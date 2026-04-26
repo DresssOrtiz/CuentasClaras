@@ -31,14 +31,14 @@ services:
       APP_NAME: Cuentas Claras API
       APP_ENV: development
       BACKEND_PORT: ${BACKEND_PORT:-8000}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-cuentas_claras}
       POSTGRES_USER: ${POSTGRES_USER:-cuentas_claras_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://cuentas_claras_user:change_me@postgres:5432/cuentas_claras}
-      SUPPORT_UPLOAD_DIR: ${SUPPORT_UPLOAD_DIR:-storage/supports}
+      SUPPORT_STORAGE_PATH: ${SUPPORT_STORAGE_PATH:-/app/storage/supports}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

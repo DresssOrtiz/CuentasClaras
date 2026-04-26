@@ -2,6 +2,11 @@
 
 API base en FastAPI.
 
+Preparado para correr:
+
+- en local con Docker Compose
+- en Render como `Web Service`
+
 En este paso expone:
 
 - `GET /health`
@@ -25,9 +30,16 @@ Soportes en esta etapa:
 - un movimiento puede tener 0 o 1 soporte
 - tipos permitidos: PDF, JPG, PNG y WEBP
 - si un movimiento ya tiene soporte, una nueva carga reemplaza el archivo anterior
-- los archivos se guardan localmente en `storage/supports`
+- los archivos se guardan en una ruta configurable por `SUPPORT_STORAGE_PATH`
 - `support/file` devuelve el archivo real para visualizacion
 - `support/download` devuelve el archivo real para descarga
+
+Variables relevantes para despliegue:
+
+- `DATABASE_URL`
+- `CORS_ALLOWED_ORIGINS`
+- `SUPPORT_STORAGE_PATH`
+- `APP_ENV`
 
 Revision en esta etapa:
 

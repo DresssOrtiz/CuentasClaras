@@ -23,7 +23,7 @@ def create_db_and_tables() -> None:
 
 
 def ensure_storage_dirs() -> None:
-    Path(settings.support_upload_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.support_storage_path).mkdir(parents=True, exist_ok=True)
 
 
 def ensure_movement_review_columns() -> None:
