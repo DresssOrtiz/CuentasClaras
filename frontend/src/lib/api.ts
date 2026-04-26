@@ -12,7 +12,7 @@ import type {
   User,
 } from "../types";
 
-const apiUrl = normalizeBaseUrl(import.meta.env.VITE_API_URL ?? "http://localhost:8000");
+const apiUrl = normalizeBaseUrl(import.meta.env.VITE_API_URL ?? "/api");
 const AUTH_TOKEN_KEY = "cuentas-claras-auth-token";
 
 export type SupportFileResponse = {
@@ -227,8 +227,12 @@ function extractFilename(contentDisposition: string): string | null {
 function normalizeBaseUrl(value: string): string {
   const normalized = value.trim().replace(/\/+$/, "");
 
+  if (normalized.startsWith("/")) {
+    return normalized;
+  }
+
   if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
-    return normalized
+    return normalized;
   }
 
   return `https://${normalized}`;

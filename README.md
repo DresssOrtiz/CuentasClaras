@@ -76,6 +76,39 @@ Este repositorio ya cuenta con un MVP local funcional y con preparacion para un 
 ### Frontend
 
 - `VITE_API_URL`: URL base del backend. En local suele ser `http://localhost:8000`. En Render puede apuntar al dominio del backend, por ejemplo `https://tu-backend.onrender.com`.
+- `VITE_PROXY_TARGET`: destino interno que usa Vite para reenviar `/api/*` hacia FastAPI cuando compartes la app con ngrok.
+
+## Compartir Con ngrok
+
+La forma mas practica de compartir esta app sin pagar hosting es exponer solo el frontend con `ngrok` y hacer que Vite proxyee `/api/*` al backend local.
+
+Esto conserva:
+
+- registro
+- login
+- logout
+- movimientos
+- historial
+- estadisticas
+- revision
+- soportes
+
+Configuracion usada:
+
+- frontend local: `http://localhost:5173`
+- backend local: `http://localhost:8000`
+- `VITE_API_URL=/api`
+- `VITE_PROXY_TARGET=http://backend:8000`
+
+Importante:
+
+- no necesitas abrir un tunel publico para el backend
+- compartes un solo link publico: el del frontend
+- el frontend reenvia internamente las llamadas al backend
+
+Segun la documentacion oficial de ngrok, el plan free tiene `1` active endpoint, asi que esta solucion de un solo tunel es la mas practica para hoy:
+
+- [ngrok Free Plan Limits](https://ngrok.com/docs/pricing-limits/free-plan-limits/)
 
 ## Desarrollo local con Docker Compose
 
