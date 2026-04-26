@@ -9,6 +9,13 @@ Preparado para correr:
 
 En esta etapa el frontend ofrece una primera experiencia visual navegable del producto, con vistas de inicio, historial, estadisticas, perfil y reporte IA.
 
+El acceso ya no entra directo al dashboard:
+
+- existe registro real
+- existe login real
+- existe logout real
+- el nombre mostrado en perfil y encabezado viene del usuario autenticado
+
 El flujo real implementado en este paso permite:
 
 - registrar ingresos y gastos desde `Inicio`

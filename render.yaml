@@ -20,6 +20,8 @@ services:
           name: cuentas-claras-staging-frontend
           type: web
           property: host
+      - key: AUTH_SECRET_KEY
+        generateValue: true
       - key: SUPPORT_STORAGE_PATH
         value: /opt/render/project/src/storage/supports
     disk:

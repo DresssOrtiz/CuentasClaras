@@ -48,6 +48,16 @@ class Settings:
     postgres_db: str = os.getenv("POSTGRES_DB", "cuentas_claras")
     postgres_user: str = os.getenv("POSTGRES_USER", "cuentas_claras_user")
     postgres_password: str = os.getenv("POSTGRES_PASSWORD", "change_me")
+    auth_secret_key: str = os.getenv(
+        "AUTH_SECRET_KEY",
+        "change-this-staging-secret-before-deploy",
+    )
+    auth_token_expire_minutes: int = int(
+        os.getenv("AUTH_TOKEN_EXPIRE_MINUTES", "720")
+    )
+    auth_password_iterations: int = int(
+        os.getenv("AUTH_PASSWORD_ITERATIONS", "390000")
+    )
     database_url: str = _normalize_database_url(
         os.getenv(
             "DATABASE_URL",

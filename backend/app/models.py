@@ -6,10 +6,33 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    movements: Mapped[list["Movement"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
 class Movement(Base):
     __tablename__ = "movements"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     category: Mapped[str] = mapped_column(String(120), nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
@@ -33,6 +56,7 @@ class Movement(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    user: Mapped[User | None] = relationship(back_populates="movements")
 
 
 class Support(Base):

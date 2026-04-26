@@ -8,10 +8,11 @@ Este repositorio ya cuenta con un MVP local funcional y con preparacion para un 
 
 ### Ya implementado
 
+- Autenticacion minima real con registro, login, logout y usuario autenticado actual.
 - Frontend en `frontend/` con React + Vite + TypeScript.
 - Backend en `backend/` con FastAPI.
 - PostgreSQL para persistencia de movimientos y metadata de soportes.
-- Flujo real para crear, listar, editar y eliminar movimientos.
+- Flujo real para crear, listar, editar y eliminar movimientos por usuario autenticado.
 - Estadisticas reales por tipo y categoria.
 - Soporte real por movimiento con carga, reemplazo, visualizacion, descarga y eliminacion.
 - Revision manual real por movimiento con estados `pending`, `reviewed` y `flagged`.
@@ -21,7 +22,6 @@ Este repositorio ya cuenta con un MVP local funcional y con preparacion para un 
 
 ### No implementado todavia
 
-- Autenticacion.
 - Multiusuario.
 - OCR.
 - IA real.
@@ -61,6 +61,9 @@ Este repositorio ya cuenta con un MVP local funcional y con preparacion para un 
 - `DATABASE_URL`: conexion a PostgreSQL. La app acepta URLs tipo `postgresql://...` de Render y las normaliza para SQLAlchemy + psycopg.
 - `CORS_ALLOWED_ORIGINS`: lista separada por comas con los origenes permitidos para el frontend.
 - `SUPPORT_STORAGE_PATH`: ruta donde se guardan los archivos de soporte.
+- `AUTH_SECRET_KEY`: secreto usado para firmar tokens de autenticacion.
+- `AUTH_TOKEN_EXPIRE_MINUTES`: duracion del token.
+- `AUTH_PASSWORD_ITERATIONS`: iteraciones del hash PBKDF2.
 
 ### Base de datos
 
@@ -114,6 +117,9 @@ Los archivos de soporte se conservan en el volumen `support_uploads`.
 ## Endpoints disponibles
 
 - `GET /health`
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
 - `GET /movements`
 - `POST /movements`
 - `PUT /movements/{movement_id}`
@@ -180,6 +186,7 @@ Backend:
 - `DATABASE_URL` desde Render Postgres
 - `CORS_ALLOWED_ORIGINS` con el dominio del frontend de staging
 - `SUPPORT_STORAGE_PATH=/opt/render/project/src/storage/supports`
+- `AUTH_SECRET_KEY` generado en Render
 
 Frontend:
 

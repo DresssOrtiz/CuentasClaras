@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.constants import EXPENSE_CATEGORIES, INCOME_CATEGORIES
 from app.database import get_db
-from app.models import Movement, Support
+from app.models import Movement, Support, User
 from app.schemas import (
     CategoryBreakdownItem,
     MovementCreate,
@@ -18,6 +18,7 @@ from app.schemas import (
     MovementUpdate,
     SupportRead,
 )
+from app.security import get_current_user
 from app.storage import (
     ALLOWED_SUPPORT_CONTENT_TYPES,
     delete_support_file,
@@ -30,9 +31,11 @@ router = APIRouter(prefix="/movements", tags=["movements"])
 
 @router.post("", response_model=MovementRead, status_code=status.HTTP_201_CREATED)
 def create_movement(
-    payload: MovementCreate, db: Session = Depends(get_db)
+    payload: MovementCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> Movement:
-    movement = Movement(**payload.model_dump())
+    movement = Movement(**payload.model_dump(), user_id=current_user.id)
     db.add(movement)
     db.commit()
     db.refresh(movement)
@@ -40,10 +43,14 @@ def create_movement(
 
 
 @router.get("", response_model=list[MovementRead])
-def list_movements(db: Session = Depends(get_db)) -> list[Movement]:
+def list_movements(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Movement]:
     statement = (
         select(Movement)
         .options(selectinload(Movement.support))
+        .where(Movement.user_id == current_user.id)
         .order_by(Movement.date.desc(), Movement.created_at.desc())
     )
     return list(db.scalars(statement).all())
@@ -51,19 +58,12 @@ def list_movements(db: Session = Depends(get_db)) -> list[Movement]:
 
 @router.put("/{movement_id}", response_model=MovementRead)
 def update_movement(
-    movement_id: int, payload: MovementUpdate, db: Session = Depends(get_db)
+    movement_id: int,
+    payload: MovementUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> Movement:
-    movement = db.scalar(
-        select(Movement)
-        .options(selectinload(Movement.support))
-        .where(Movement.id == movement_id)
-    )
-
-    if movement is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Movement with id {movement_id} was not found.",
-        )
+    movement = get_owned_movement(movement_id, db, current_user.id)
 
     for field, value in payload.model_dump().items():
         setattr(movement, field, value)
@@ -75,19 +75,12 @@ def update_movement(
 
 @router.patch("/{movement_id}/review", response_model=MovementRead)
 def update_movement_review(
-    movement_id: int, payload: MovementReviewUpdate, db: Session = Depends(get_db)
+    movement_id: int,
+    payload: MovementReviewUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> Movement:
-    movement = db.scalar(
-        select(Movement)
-        .options(selectinload(Movement.support))
-        .where(Movement.id == movement_id)
-    )
-
-    if movement is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Movement with id {movement_id} was not found.",
-        )
+    movement = get_owned_movement(movement_id, db, current_user.id)
 
     movement.review_status = payload.review_status
     movement.review_note = payload.review_note.strip() if payload.review_note else None
@@ -98,18 +91,12 @@ def update_movement_review(
 
 
 @router.delete("/{movement_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_movement(movement_id: int, db: Session = Depends(get_db)) -> Response:
-    movement = db.scalar(
-        select(Movement)
-        .options(selectinload(Movement.support))
-        .where(Movement.id == movement_id)
-    )
-
-    if movement is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Movement with id {movement_id} was not found.",
-        )
+def delete_movement(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    movement = get_owned_movement(movement_id, db, current_user.id)
 
     if movement.support is not None:
         delete_support_file(movement.support.storage_path)
@@ -128,18 +115,9 @@ def upload_support(
     movement_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> Support:
-    movement = db.scalar(
-        select(Movement)
-        .options(selectinload(Movement.support))
-        .where(Movement.id == movement_id)
-    )
-
-    if movement is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Movement with id {movement_id} was not found.",
-        )
+    movement = get_owned_movement(movement_id, db, current_user.id)
 
     if file.content_type not in ALLOWED_SUPPORT_CONTENT_TYPES:
         raise HTTPException(
@@ -167,13 +145,21 @@ def upload_support(
 
 
 @router.get("/{movement_id}/support", response_model=SupportRead)
-def get_support_metadata(movement_id: int, db: Session = Depends(get_db)) -> Support:
-    return get_required_support(movement_id, db)
+def get_support_metadata(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Support:
+    return get_required_support(movement_id, db, current_user.id)
 
 
 @router.get("/{movement_id}/support/file")
-def get_support_file(movement_id: int, db: Session = Depends(get_db)) -> FileResponse:
-    support = get_required_support(movement_id, db)
+def get_support_file(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    support = get_required_support(movement_id, db, current_user.id)
     file_path = resolve_support_file_path(support.storage_path)
 
     if not file_path.exists():
@@ -194,8 +180,12 @@ def get_support_file(movement_id: int, db: Session = Depends(get_db)) -> FileRes
 
 
 @router.get("/{movement_id}/support/download")
-def download_support_file(movement_id: int, db: Session = Depends(get_db)) -> FileResponse:
-    support = get_required_support(movement_id, db)
+def download_support_file(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    support = get_required_support(movement_id, db, current_user.id)
     file_path = resolve_support_file_path(support.storage_path)
 
     if not file_path.exists():
@@ -216,18 +206,12 @@ def download_support_file(movement_id: int, db: Session = Depends(get_db)) -> Fi
 
 
 @router.delete("/{movement_id}/support", status_code=status.HTTP_204_NO_CONTENT)
-def delete_support(movement_id: int, db: Session = Depends(get_db)) -> Response:
-    movement = db.scalar(
-        select(Movement)
-        .options(selectinload(Movement.support))
-        .where(Movement.id == movement_id)
-    )
-
-    if movement is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Movement with id {movement_id} was not found.",
-        )
+def delete_support(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    movement = get_owned_movement(movement_id, db, current_user.id)
 
     if movement.support is None:
         raise HTTPException(
@@ -242,9 +226,16 @@ def delete_support(movement_id: int, db: Session = Depends(get_db)) -> Response:
 
 
 @router.get("/stats", response_model=MovementStatsRead)
-def get_movement_stats(db: Session = Depends(get_db)) -> MovementStatsRead:
+def get_movement_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MovementStatsRead:
     movements = list(
-        db.scalars(select(Movement).options(selectinload(Movement.support))).all()
+        db.scalars(
+            select(Movement)
+            .options(selectinload(Movement.support))
+            .where(Movement.user_id == current_user.id)
+        ).all()
     )
 
     income_movements = [movement for movement in movements if movement.type == "income"]
@@ -289,18 +280,8 @@ def build_category_breakdown(
     return breakdown
 
 
-def get_required_support(movement_id: int, db: Session) -> Support:
-    movement = db.scalar(
-        select(Movement)
-        .options(selectinload(Movement.support))
-        .where(Movement.id == movement_id)
-    )
-
-    if movement is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Movement with id {movement_id} was not found.",
-        )
+def get_required_support(movement_id: int, db: Session, user_id: int) -> Support:
+    movement = get_owned_movement(movement_id, db, user_id)
 
     if movement.support is None:
         raise HTTPException(
@@ -309,6 +290,22 @@ def get_required_support(movement_id: int, db: Session) -> Support:
         )
 
     return movement.support
+
+
+def get_owned_movement(movement_id: int, db: Session, user_id: int) -> Movement:
+    movement = db.scalar(
+        select(Movement)
+        .options(selectinload(Movement.support))
+        .where(Movement.id == movement_id, Movement.user_id == user_id)
+    )
+
+    if movement is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Movement with id {movement_id} was not found.",
+        )
+
+    return movement
 
 
 def build_content_disposition(disposition_type: str, filename: str) -> str:

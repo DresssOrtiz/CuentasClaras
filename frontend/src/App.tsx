@@ -1,22 +1,30 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { AuthScreen } from "./components/AuthScreen";
 import { CATEGORIES_BY_TYPE, REVIEW_STATUS_OPTIONS } from "./constants";
 import { MetricCard, PanelCard, StatusPill } from "./components/ui";
-import { aiHighlights, monthlyBars, profileSections, quickActions } from "./data/mockData";
+import { aiHighlights, monthlyBars, quickActions } from "./data/mockData";
 import {
+  clearStoredAuthToken,
   createMovement,
   deleteMovement,
   deleteMovementSupport,
+  fetchCurrentUser,
   fetchHealth as getHealth,
   fetchMovements,
   fetchReviewSummary,
   fetchMovementSupportFile,
   fetchMovementStats,
+  getStoredAuthToken,
+  loginUser,
+  registerUser,
+  setStoredAuthToken,
   uploadMovementSupport,
   updateMovementReview,
   updateMovement,
 } from "./lib/api";
 import type {
+  AuthPayload,
   CategoryBreakdownItem,
   HealthResponse,
   Movement,
@@ -27,6 +35,7 @@ import type {
   MovementUpdatePayload,
   ReviewStatus,
   ReviewSummary,
+  User,
 } from "./types";
 
 type ViewId = "inicio" | "historial" | "estadisticas" | "perfil" | "reporte-ia";
@@ -47,6 +56,11 @@ const navItems: NavItem[] = [
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewId>("inicio");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -89,10 +103,54 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void loadMovements();
-    void loadStats();
-    void loadReviewSummary();
+    const bootstrapAuth = async () => {
+      const token = getStoredAuthToken();
+
+      if (!token) {
+        setAuthLoading(false);
+        setAuthReady(true);
+        setLoadingMovements(false);
+        setLoadingStats(false);
+        setLoadingReviewSummary(false);
+        return;
+      }
+
+      try {
+        const user = await fetchCurrentUser();
+        setCurrentUser(user);
+      } catch (requestError) {
+        clearStoredAuthToken();
+        setAuthMessage(
+          requestError instanceof Error
+            ? requestError.message
+            : "Tu sesion ya no es valida. Inicia sesion de nuevo.",
+        );
+      } finally {
+        setAuthLoading(false);
+        setAuthReady(true);
+      }
+    };
+
+    void bootstrapAuth();
   }, []);
+
+  useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
+    if (!currentUser) {
+      setMovements([]);
+      setStats(null);
+      setReviewSummary(null);
+      setLoadingMovements(false);
+      setLoadingStats(false);
+      setLoadingReviewSummary(false);
+      return;
+    }
+
+    void refreshMovementData();
+  }, [authReady, currentUser]);
 
   const apiStatus = useMemo(() => {
     if (health) {
@@ -183,6 +241,47 @@ export default function App() {
     } finally {
       setLoadingReviewSummary(false);
     }
+  }
+
+  async function handleAuthenticate(payload: AuthPayload) {
+    setAuthLoading(true);
+    setAuthMessage(null);
+
+    try {
+      const response =
+        authMode === "login"
+          ? await loginUser(payload)
+          : await registerUser(payload);
+
+      setStoredAuthToken(response.access_token);
+      setCurrentUser(response.user);
+      setActiveView("inicio");
+      setAuthMessage(
+        authMode === "login"
+          ? "Sesion iniciada correctamente."
+          : "Cuenta creada correctamente.",
+      );
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "No fue posible completar la autenticacion";
+
+      setAuthMessage(message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    clearStoredAuthToken();
+    setCurrentUser(null);
+    setEditingMovement(null);
+    setActiveView("inicio");
+    setSubmitMessage(null);
+    setHistoryMessage(null);
+    setAuthMode("login");
+    setAuthMessage("Sesion cerrada correctamente.");
   }
 
   async function handleCreateMovement(payload: MovementPayload): Promise<boolean> {
@@ -398,6 +497,34 @@ export default function App() {
     }
   }
 
+  if (!authReady || (authLoading && getStoredAuthToken())) {
+    return (
+      <div className="auth-loading-shell">
+        <PanelCard className="auth-loading-card">
+          <span className="section-tag">Acceso</span>
+          <h3>Preparando tu sesion</h3>
+          <p className="api-inline">{apiStatus}</p>
+        </PanelCard>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <AuthScreen
+        apiStatus={apiStatus}
+        loading={authLoading}
+        mode={authMode}
+        message={authMessage}
+        onSubmit={handleAuthenticate}
+        onSwitchMode={(mode) => {
+          setAuthMode(mode);
+          setAuthMessage(null);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="application-frame">
       <aside className="sidebar">
@@ -446,10 +573,17 @@ export default function App() {
             <h2>{getViewTitle(activeView)}</h2>
           </div>
           <div className="topbar-meta">
+            <div className="user-chip">
+              <strong>{currentUser.name}</strong>
+              <small>{currentUser.email}</small>
+            </div>
             <StatusPill tone={health ? "success" : error ? "danger" : "info"}>
               {health ? health.status.toUpperCase() : error ? "ERROR" : "SYNC"}
             </StatusPill>
             <span className="api-inline">{apiStatus}</span>
+            <button type="button" className="inline-action-button" onClick={handleLogout}>
+              Cerrar sesion
+            </button>
           </div>
         </header>
 
@@ -488,6 +622,7 @@ export default function App() {
             onViewSupport: handleViewSupport,
             onDownloadSupport: handleDownloadSupport,
             onDeleteSupport: handleDeleteSupport,
+            currentUser,
           })}
         </section>
       </main>
@@ -560,6 +695,7 @@ function renderView({
   onViewSupport,
   onDownloadSupport,
   onDeleteSupport,
+  currentUser,
 }: {
   view: ViewId;
   apiStatus: string;
@@ -607,6 +743,7 @@ function renderView({
   onViewSupport: (movement: Movement) => Promise<void>;
   onDownloadSupport: (movement: Movement) => Promise<void>;
   onDeleteSupport: (movement: Movement) => Promise<void>;
+  currentUser: User;
 }) {
   switch (view) {
     case "inicio":
@@ -657,7 +794,13 @@ function renderView({
         />
       );
     case "perfil":
-      return <ProfileView />;
+      return (
+        <ProfileView
+          user={currentUser}
+          stats={stats}
+          reviewSummary={reviewSummary}
+        />
+      );
     case "reporte-ia":
       return <AiReportView movementCount={stats?.total_movements ?? movements.length} />;
     default:
@@ -1406,39 +1549,85 @@ function CategoryStatsList({
   );
 }
 
-function ProfileView() {
+function ProfileView({
+  user,
+  stats,
+  reviewSummary,
+}: {
+  user: User;
+  stats: MovementStats | null;
+  reviewSummary: ReviewSummary | null;
+}) {
+  const initials = user.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((chunk: string) => chunk[0]?.toUpperCase() ?? "")
+    .join("");
+
   return (
     <div className="dual-grid">
       <PanelCard className="profile-card">
         <div className="profile-header">
-          <div className="profile-avatar">AC</div>
+          <div className="profile-avatar">{initials || "CC"}</div>
           <div>
-            <h3>Andres Calderon</h3>
-            <p>Freelancer independiente</p>
-            <small>andres@cuentasclaras.demo</small>
+            <h3>{user.name}</h3>
+            <p>Usuario autenticado en staging</p>
+            <small>{user.email}</small>
           </div>
         </div>
       </PanelCard>
 
       <div className="stack-layout">
-        {profileSections.map((section) => (
-          <PanelCard key={section.title}>
-            <div className="card-heading">
-              <div>
-                <span className="section-tag">{section.kicker}</span>
-                <h3>{section.title}</h3>
-              </div>
+        <PanelCard>
+          <div className="card-heading">
+            <div>
+              <span className="section-tag">Cuenta</span>
+              <h3>Informacion real del usuario</h3>
             </div>
-            <div className="profile-list">
-              {section.items.map((item) => (
-                <div key={item.label} className="profile-row">
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
+          </div>
+          <div className="profile-list">
+            <div className="profile-row">
+              <span>Nombre</span>
+              <strong>{user.name}</strong>
             </div>
-          </PanelCard>
-        ))}
+            <div className="profile-row">
+              <span>Correo</span>
+              <strong>{user.email}</strong>
+            </div>
+            <div className="profile-row">
+              <span>Miembro desde</span>
+              <strong>{formatDateTime(user.created_at)}</strong>
+            </div>
+          </div>
+        </PanelCard>
+
+        <PanelCard>
+          <div className="card-heading">
+            <div>
+              <span className="section-tag">Actividad</span>
+              <h3>Resumen de tu expediente</h3>
+            </div>
+          </div>
+          <div className="profile-list">
+            <div className="profile-row">
+              <span>Movimientos registrados</span>
+              <strong>{stats?.total_movements ?? 0}</strong>
+            </div>
+            <div className="profile-row">
+              <span>Movimientos con soporte</span>
+              <strong>{stats?.movements_with_support ?? 0}</strong>
+            </div>
+            <div className="profile-row">
+              <span>Movimientos revisados</span>
+              <strong>{reviewSummary?.reviewed_movements ?? 0}</strong>
+            </div>
+            <div className="profile-row">
+              <span>Movimientos observados</span>
+              <strong>{reviewSummary?.flagged_movements ?? 0}</strong>
+            </div>
+          </div>
+        </PanelCard>
       </div>
     </div>
   );
@@ -1712,6 +1901,14 @@ function formatDate(value: string): string {
     month: "short",
     year: "numeric",
   }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("es-CO", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function readableContentType(contentType: string): string {

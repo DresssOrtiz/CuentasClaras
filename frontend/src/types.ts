@@ -1,6 +1,25 @@
 export type MovementType = "income" | "expense";
 export type ReviewStatus = "pending" | "reviewed" | "flagged";
 
+export type User = {
+  id: number;
+  name: string;
+  email: string;
+  created_at: string;
+};
+
+export type AuthPayload = {
+  name?: string;
+  email: string;
+  password: string;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  token_type: "bearer";
+  user: User;
+};
+
 export type Support = {
   id: number;
   movement_id: number;

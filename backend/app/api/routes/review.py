@@ -3,16 +3,24 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models import Movement
+from app.models import Movement, User
 from app.schemas import ReviewSummaryRead
+from app.security import get_current_user
 
 router = APIRouter(prefix="/review", tags=["review"])
 
 
 @router.get("/summary", response_model=ReviewSummaryRead)
-def get_review_summary(db: Session = Depends(get_db)) -> ReviewSummaryRead:
+def get_review_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewSummaryRead:
     movements = list(
-        db.scalars(select(Movement).options(selectinload(Movement.support))).all()
+        db.scalars(
+            select(Movement)
+            .options(selectinload(Movement.support))
+            .where(Movement.user_id == current_user.id)
+        ).all()
     )
 
     movements_with_support = [movement for movement in movements if movement.support is not None]

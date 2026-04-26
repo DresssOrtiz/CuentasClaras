@@ -1,15 +1,19 @@
 import type {
+  AuthPayload,
+  AuthResponse,
   HealthResponse,
   Movement,
   MovementPayload,
   MovementReviewPayload,
   MovementStats,
+  MovementUpdatePayload,
   ReviewSummary,
   Support,
-  MovementUpdatePayload,
+  User,
 } from "../types";
 
 const apiUrl = normalizeBaseUrl(import.meta.env.VITE_API_URL ?? "http://localhost:8000");
+const AUTH_TOKEN_KEY = "cuentas-claras-auth-token";
 
 export type SupportFileResponse = {
   blob: Blob;
@@ -27,18 +31,36 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return (await response.json()) as HealthResponse;
 }
 
-export async function fetchMovements(): Promise<Movement[]> {
-  const response = await fetch(`${apiUrl}/movements`);
+export async function registerUser(payload: AuthPayload): Promise<AuthResponse> {
+  return await postAuthPayload("/auth/register", payload);
+}
+
+export async function loginUser(payload: AuthPayload): Promise<AuthResponse> {
+  return await postAuthPayload("/auth/login", payload);
+}
+
+export async function fetchCurrentUser(): Promise<User> {
+  const response = await apiFetch("/auth/me");
 
   if (!response.ok) {
-    throw new Error(`Movements request failed with status ${response.status}`);
+    throw await buildRequestError(response, "Fetch current user failed");
+  }
+
+  return (await response.json()) as User;
+}
+
+export async function fetchMovements(): Promise<Movement[]> {
+  const response = await apiFetch("/movements");
+
+  if (!response.ok) {
+    throw await buildRequestError(response, "Movements request failed");
   }
 
   return (await response.json()) as Movement[];
 }
 
 export async function createMovement(payload: MovementPayload): Promise<Movement> {
-  const response = await fetch(`${apiUrl}/movements`, {
+  const response = await apiFetch("/movements", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -47,21 +69,7 @@ export async function createMovement(payload: MovementPayload): Promise<Movement
   });
 
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as
-      | {
-          detail?:
-            | string
-            | Array<{
-                msg?: string;
-              }>;
-        }
-      | null;
-
-    const detail = Array.isArray(data?.detail)
-      ? data.detail.map((item) => item.msg).filter(Boolean).join(" ")
-      : data?.detail;
-
-    throw new Error(detail ?? `Create movement failed with status ${response.status}`);
+    throw await buildRequestError(response, "Create movement failed");
   }
 
   return (await response.json()) as Movement;
@@ -71,7 +79,7 @@ export async function updateMovement(
   movementId: number,
   payload: MovementUpdatePayload,
 ): Promise<Movement> {
-  const response = await fetch(`${apiUrl}/movements/${movementId}`, {
+  const response = await apiFetch(`/movements/${movementId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -80,34 +88,19 @@ export async function updateMovement(
   });
 
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as
-      | {
-          detail?:
-            | string
-            | Array<{
-                msg?: string;
-              }>;
-        }
-      | null;
-
-    const detail = Array.isArray(data?.detail)
-      ? data.detail.map((item) => item.msg).filter(Boolean).join(" ")
-      : data?.detail;
-
-    throw new Error(detail ?? `Update movement failed with status ${response.status}`);
+    throw await buildRequestError(response, "Update movement failed");
   }
 
   return (await response.json()) as Movement;
 }
 
 export async function deleteMovement(movementId: number): Promise<void> {
-  const response = await fetch(`${apiUrl}/movements/${movementId}`, {
+  const response = await apiFetch(`/movements/${movementId}`, {
     method: "DELETE",
   });
 
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail ?? `Delete movement failed with status ${response.status}`);
+    throw await buildRequestError(response, "Delete movement failed");
   }
 }
 
@@ -115,7 +108,7 @@ export async function updateMovementReview(
   movementId: number,
   payload: MovementReviewPayload,
 ): Promise<Movement> {
-  const response = await fetch(`${apiUrl}/movements/${movementId}/review`, {
+  const response = await apiFetch(`/movements/${movementId}/review`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -124,8 +117,7 @@ export async function updateMovementReview(
   });
 
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail ?? `Update review failed with status ${response.status}`);
+    throw await buildRequestError(response, "Update review failed");
   }
 
   return (await response.json()) as Movement;
@@ -138,27 +130,25 @@ export async function uploadMovementSupport(
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${apiUrl}/movements/${movementId}/support`, {
+  const response = await apiFetch(`/movements/${movementId}/support`, {
     method: "POST",
     body: formData,
   });
 
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail ?? `Upload support failed with status ${response.status}`);
+    throw await buildRequestError(response, "Upload support failed");
   }
 
   return (await response.json()) as Support;
 }
 
 export async function deleteMovementSupport(movementId: number): Promise<void> {
-  const response = await fetch(`${apiUrl}/movements/${movementId}/support`, {
+  const response = await apiFetch(`/movements/${movementId}/support`, {
     method: "DELETE",
   });
 
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail ?? `Delete support failed with status ${response.status}`);
+    throw await buildRequestError(response, "Delete support failed");
   }
 }
 
@@ -166,16 +156,15 @@ export async function fetchMovementSupportFile(
   movementId: number,
   mode: "view" | "download" = "view",
 ): Promise<SupportFileResponse> {
-  const endpoint =
+  const path =
     mode === "download"
-      ? `${apiUrl}/movements/${movementId}/support/download`
-      : `${apiUrl}/movements/${movementId}/support/file`;
+      ? `/movements/${movementId}/support/download`
+      : `/movements/${movementId}/support/file`;
 
-  const response = await fetch(endpoint);
+  const response = await apiFetch(path);
 
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail ?? `Support file request failed with status ${response.status}`);
+    throw await buildRequestError(response, "Support file request failed");
   }
 
   const contentType = response.headers.get("content-type") ?? "application/octet-stream";
@@ -190,23 +179,35 @@ export async function fetchMovementSupportFile(
 }
 
 export async function fetchMovementStats(): Promise<MovementStats> {
-  const response = await fetch(`${apiUrl}/movements/stats`);
+  const response = await apiFetch("/movements/stats");
 
   if (!response.ok) {
-    throw new Error(`Stats request failed with status ${response.status}`);
+    throw await buildRequestError(response, "Stats request failed");
   }
 
   return (await response.json()) as MovementStats;
 }
 
 export async function fetchReviewSummary(): Promise<ReviewSummary> {
-  const response = await fetch(`${apiUrl}/review/summary`);
+  const response = await apiFetch("/review/summary");
 
   if (!response.ok) {
-    throw new Error(`Review summary request failed with status ${response.status}`);
+    throw await buildRequestError(response, "Review summary request failed");
   }
 
   return (await response.json()) as ReviewSummary;
+}
+
+export function getStoredAuthToken(): string | null {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setStoredAuthToken(token: string): void {
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function clearStoredAuthToken(): void {
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
 function extractFilename(contentDisposition: string): string | null {
@@ -227,8 +228,59 @@ function normalizeBaseUrl(value: string): string {
   const normalized = value.trim().replace(/\/+$/, "");
 
   if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
-    return normalized;
+    return normalized
   }
 
   return `https://${normalized}`;
+}
+
+async function postAuthPayload(path: string, payload: AuthPayload): Promise<AuthResponse> {
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw await buildRequestError(response, "Authentication request failed");
+  }
+
+  return (await response.json()) as AuthResponse;
+}
+
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const token = getStoredAuthToken();
+  const headers = new Headers(init?.headers);
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  return await fetch(`${apiUrl}${path}`, {
+    ...init,
+    headers,
+  });
+}
+
+async function buildRequestError(
+  response: Response,
+  fallbackMessage: string,
+): Promise<Error> {
+  const data = (await response.json().catch(() => null)) as
+    | {
+        detail?:
+          | string
+          | Array<{
+              msg?: string;
+            }>;
+      }
+    | null;
+
+  const detail = Array.isArray(data?.detail)
+    ? data.detail.map((item) => item.msg).filter(Boolean).join(" ")
+    : data?.detail;
+
+  return new Error(detail ?? `${fallbackMessage} with status ${response.status}`);
 }

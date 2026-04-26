@@ -10,6 +10,9 @@ Preparado para correr:
 En este paso expone:
 
 - `GET /health`
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
 - `GET /movements`
 - `POST /movements`
 - `PUT /movements/{movement_id}`
@@ -23,7 +26,8 @@ En este paso expone:
 - `GET /movements/{movement_id}/support/file`
 - `GET /movements/{movement_id}/support/download`
 
-Tambien persiste movimientos minimos y metadata de soportes en PostgreSQL, y crea las tablas necesarias al iniciar la aplicacion.
+Tambien persiste usuarios, movimientos minimos y metadata de soportes en PostgreSQL, y crea las tablas necesarias al iniciar la aplicacion.
+Los movimientos quedan asociados al usuario autenticado.
 
 Soportes en esta etapa:
 
@@ -40,6 +44,7 @@ Variables relevantes para despliegue:
 - `CORS_ALLOWED_ORIGINS`
 - `SUPPORT_STORAGE_PATH`
 - `APP_ENV`
+- `AUTH_SECRET_KEY`
 
 Revision en esta etapa:
 
