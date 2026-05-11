@@ -74,6 +74,7 @@ class Settings:
             str(Path("storage") / "supports"),
         ),
     )
+    support_storage_mode: str = os.getenv("SUPPORT_STORAGE_MODE", "disk").strip().lower()
     support_upload_dir: str = support_storage_path
 
 

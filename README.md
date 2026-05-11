@@ -4,7 +4,7 @@ Cuentas Claras es una plataforma web orientada a personas naturales en Colombia,
 
 ## Estado actual del proyecto
 
-Este repositorio ya cuenta con un MVP local funcional y con preparacion para un entorno `staging` en Render.
+Este repositorio ya cuenta con un MVP local funcional y con preparacion para una demo publica gratis en Render.
 
 ### Ya implementado
 
@@ -14,11 +14,11 @@ Este repositorio ya cuenta con un MVP local funcional y con preparacion para un 
 - PostgreSQL para persistencia de movimientos y metadata de soportes.
 - Flujo real para crear, listar, editar y eliminar movimientos por usuario autenticado.
 - Estadisticas reales por tipo y categoria.
-- Soporte real por movimiento con carga, reemplazo, visualizacion, descarga y eliminacion.
+- Soporte por movimiento con carga, reemplazo, visualizacion, descarga y eliminacion.
 - Revision manual real por movimiento con estados `pending`, `reviewed` y `flagged`.
 - Resumen real del expediente en el dashboard.
 - Compatibilidad local con Docker Compose.
-- Preparacion de despliegue `staging` para Render con frontend estatico, backend web service, Render Postgres y persistent disk para soportes.
+- Preparacion de despliegue gratis en Render con frontend estatico, backend web service, Render Postgres free y soportes simulados para demo.
 
 ### No implementado todavia
 
@@ -61,6 +61,7 @@ Este repositorio ya cuenta con un MVP local funcional y con preparacion para un 
 - `DATABASE_URL`: conexion a PostgreSQL. La app acepta URLs tipo `postgresql://...` de Render y las normaliza para SQLAlchemy + psycopg.
 - `CORS_ALLOWED_ORIGINS`: lista separada por comas con los origenes permitidos para el frontend.
 - `SUPPORT_STORAGE_PATH`: ruta donde se guardan los archivos de soporte.
+- `SUPPORT_STORAGE_MODE`: `disk` en local y `mock` para demo publica gratis sin almacenamiento persistente.
 - `AUTH_SECRET_KEY`: secreto usado para firmar tokens de autenticacion.
 - `AUTH_TOKEN_EXPIRE_MINUTES`: duracion del token.
 - `AUTH_PASSWORD_ITERATIONS`: iteraciones del hash PBKDF2.
@@ -153,23 +154,23 @@ Gastos:
 - `Servicios`
 - `Otros gastos`
 
-## Despliegue de staging en Render
+## Despliegue gratis en Render
 
-La preparacion de staging sigue esta arquitectura:
+La configuracion gratuita sigue esta arquitectura:
 
 - Frontend: `Static Site`
-- Backend: `Web Service`
-- Base de datos: `Render Postgres`
-- Soportes: `Persistent Disk` montado en el backend
+- Backend: `Web Service` plan `free`
+- Base de datos: `Render Postgres` plan `free`
+- Soportes: modo `mock`, sin `Persistent Disk`
 
 ### Archivo `render.yaml`
 
-El repositorio incluye [render.yaml](C:/Users/andre/OneDrive/Desktop/Innovacion/CuentasClaras/render.yaml:1) para facilitar un despliegue de staging con:
+El repositorio incluye [render.yaml](C:/Users/andre/OneDrive/Desktop/Innovacion/CuentasClaras/render.yaml:1) para facilitar un despliegue gratis con:
 
 - un `Web Service` para el backend
 - un `Static Site` para el frontend
-- una base `Render Postgres`
-- un `Persistent Disk` para los soportes
+- una base `Render Postgres` free
+- soportes simulados para no depender de disco pago
 
 El blueprint deja conectados:
 
@@ -179,35 +180,30 @@ El blueprint deja conectados:
 
 La app normaliza esos valores para que funcionen bien aunque Render entregue solo el host del servicio.
 
-### Variables recomendadas para staging
+### Variables recomendadas para demo gratis
 
 Backend:
 
-- `APP_ENV=staging`
+- `APP_ENV=demo`
 - `DATABASE_URL` desde Render Postgres
-- `CORS_ALLOWED_ORIGINS` con el dominio del frontend de staging
-- `SUPPORT_STORAGE_PATH=/opt/render/project/src/storage/supports`
+- `CORS_ALLOWED_ORIGINS` con el dominio del frontend publico
+- `SUPPORT_STORAGE_MODE=mock`
 - `AUTH_SECRET_KEY` generado en Render
 
 Frontend:
 
 - `VITE_API_URL=https://<backend-service>.onrender.com`
 
-### Persistent disk para soportes
+### Como funciona la subida de archivos en demo
 
-Mount path recomendado:
+- El usuario puede seleccionar un PDF o imagen.
+- La API guarda la metadata del archivo en PostgreSQL.
+- La UI muestra el nombre del archivo y el movimiento queda `Con soporte`.
+- `Ver soporte` abre una vista demo intencional.
+- `Descargar` baja un archivo demo explicando que el contenido es simulado.
+- `Eliminar soporte` sigue funcionando normal.
 
-```text
-/opt/render/project/src/storage
-```
-
-Ruta efectiva de soportes:
-
-```text
-/opt/render/project/src/storage/supports
-```
-
-Esto mantiene persistentes los archivos subidos por movimiento entre deploys y reinicios del backend.
+Esto evita depender de `Persistent Disk` y mantiene la experiencia completa para demo publica.
 
 ### Pasos exactos para desplegar en Render
 
@@ -215,14 +211,14 @@ Esto mantiene persistentes los archivos subidos por movimiento entre deploys y r
 2. En Render, crea un nuevo Blueprint apuntando a este repo.
 3. Usa el archivo `render.yaml` de la raiz.
 4. Revisa los recursos que se van a crear:
-   - `cuentas-claras-staging-backend`
-   - `cuentas-claras-staging-frontend`
-   - `cuentas-claras-staging-db`
-5. Confirma que el backend tenga attached disk en:
-   - `/opt/render/project/src/storage`
-6. Lanza el deploy inicial.
-7. Cuando termine:
-   - abre el frontend de staging
+   - `cuentas-claras-demo-backend`
+   - `cuentas-claras-demo-frontend`
+   - `cuentas-claras-demo-db`
+5. Confirma que el backend este en plan `free`.
+6. Confirma que la base este en plan `free`.
+7. Lanza el deploy inicial.
+8. Cuando termine:
+   - abre el frontend publico
    - verifica `GET /health` en el backend
    - crea un movimiento
    - adjunta un soporte
@@ -240,13 +236,13 @@ Solo necesitas un proveedor de dominio si quieres una URL propia como `app.tudom
 - configuras los registros DNS en tu proveedor
 - verificas el dominio en Render
 
-### Como conectar frontend y backend en staging
+### Como conectar frontend y backend en demo
 
 - El frontend debe apuntar al backend con `VITE_API_URL`.
 - El backend debe permitir el dominio del frontend en `CORS_ALLOWED_ORIGINS`.
 - En el blueprint actual, ambos valores quedan enlazados usando referencias entre servicios.
 
-### Como probar staging una vez desplegado
+### Como probar la demo una vez desplegada
 
 1. Abre la URL publica del frontend.
 2. Confirma que la app carga y navega entre `Inicio`, `Historial`, `Estadisticas`, `Perfil` y `Reporte IA`.
@@ -263,25 +259,27 @@ Solo necesitas un proveedor de dominio si quieres una URL propia como `app.tudom
    - `https://<backend-service>.onrender.com/movements/stats`
    - `https://<backend-service>.onrender.com/review/summary`
 
-## Limitaciones normales de este MVP en staging
+## Limitaciones reales de la demo gratis
 
-- No hay autenticacion.
-- Los soportes siguen guardandose en disco local persistente del backend, no en storage cloud.
+- La autenticacion y los movimientos siguen funcionando, pero dependen de una base free de Render.
+- La base `Render Postgres` free expira 30 dias despues de creada si no se actualiza a pago.
+- El backend free de Render se duerme tras inactividad y puede tardar cerca de un minuto en despertar.
+- Los soportes son simulados: se conserva la metadata, no el contenido original del archivo.
 - No hay OCR ni procesamiento inteligente de soportes.
 - No hay endurecimiento completo de seguridad, observabilidad o escalamiento para produccion.
 - La evolucion de esquema sigue siendo basica y todavia no usa migraciones formales.
 
-## Estado de preparacion para staging
+## Estado de preparacion para demo gratis
 
-En este punto, el repo queda listo para desplegarse online en un entorno `staging` en Render dentro del alcance actual del MVP.
+En este punto, el repo queda listo para desplegarse online en un entorno de demo publica gratis en Render dentro del alcance actual del MVP.
 
 Los puntos tecnicos clave ya cubiertos son:
 
 - configuracion de backend por variables de entorno
 - CORS configurable para dominio de frontend
 - conexion remota a PostgreSQL por `DATABASE_URL`
-- ruta configurable de soportes por `SUPPORT_STORAGE_PATH`
+- modo mock para soportes por `SUPPORT_STORAGE_MODE`
 - frontend configurado por `VITE_API_URL`
-- blueprint base de Render para frontend, backend, Postgres y persistent disk
+- blueprint base de Render para frontend, backend y Postgres free
 
-La principal limitacion que queda es propia del alcance del MVP, no un bloqueo de despliegue.
+La principal limitacion que queda es propia del modo demo gratis, no un bloqueo de despliegue.

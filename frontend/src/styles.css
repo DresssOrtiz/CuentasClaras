@@ -810,6 +810,14 @@ button {
   word-break: break-word;
 }
 
+.support-demo-note {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(215, 167, 102, 0.12);
+  border: 1px solid rgba(215, 167, 102, 0.25);
+}
+
 .detail-actions {
   justify-content: flex-start;
 }

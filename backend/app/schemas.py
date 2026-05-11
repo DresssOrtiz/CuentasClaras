@@ -115,6 +115,8 @@ class SupportRead(BaseModel):
     original_filename: str
     content_type: str
     storage_path: str
+    is_mock: bool = False
+    mock_note: str | None = None
     uploaded_at: datetime
 
 

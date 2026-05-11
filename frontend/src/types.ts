@@ -27,6 +27,8 @@ export type Support = {
   original_filename: string;
   content_type: string;
   storage_path: string;
+  is_mock: boolean;
+  mock_note: string | null;
   uploaded_at: string;
 };
 

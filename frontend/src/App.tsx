@@ -402,12 +402,15 @@ export default function App() {
     setHistoryMessage(null);
 
     try {
-      await uploadMovementSupport(movement.id, file);
+      const support = await uploadMovementSupport(movement.id, file);
       await refreshMovementData();
+      const actionLabel = movement.support ? "reemplazado" : "adjuntado";
       setHistoryMessage(
-        movement.support
-          ? "Soporte reemplazado correctamente."
-          : "Soporte adjuntado correctamente.",
+        support.is_mock
+          ? `Soporte ${actionLabel} en modo demo. El archivo se muestra como cargado, pero su contenido es simulado.`
+          : movement.support
+            ? "Soporte reemplazado correctamente."
+            : "Soporte adjuntado correctamente.",
       );
     } catch (requestError) {
       const message =
@@ -458,6 +461,9 @@ export default function App() {
       const objectUrl = URL.createObjectURL(supportFile.blob);
       window.open(objectUrl, "_blank", "noopener,noreferrer");
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      if (movement.support?.is_mock) {
+        setHistoryMessage("Vista demo del soporte abierta en una pestaña nueva.");
+      }
     } catch (requestError) {
       const message =
         requestError instanceof Error
@@ -484,7 +490,11 @@ export default function App() {
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      setHistoryMessage("Soporte descargado correctamente.");
+      setHistoryMessage(
+        movement.support?.is_mock
+          ? "Archivo demo descargado correctamente."
+          : "Soporte descargado correctamente.",
+      );
     } catch (requestError) {
       const message =
         requestError instanceof Error
@@ -1226,6 +1236,12 @@ function HistoryView({
                               ? readableContentType(movement.support.content_type)
                               : "Adjunta una imagen o PDF para continuar"}
                           </small>
+                          {movement.support?.is_mock ? (
+                            <small className="support-meta support-demo-note">
+                              {movement.support.mock_note ??
+                                "Demo publica: el archivo se ve cargado, pero su contenido es simulado y temporal."}
+                            </small>
+                          ) : null}
                         </div>
                         <div className="inline-actions detail-actions">
                           {movement.support ? (

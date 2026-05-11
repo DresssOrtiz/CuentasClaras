@@ -21,9 +21,13 @@ def create_db_and_tables() -> None:
     Base.metadata.create_all(bind=engine)
     ensure_movement_review_columns()
     ensure_movement_user_column()
+    ensure_support_demo_columns()
 
 
 def ensure_storage_dirs() -> None:
+    if settings.support_storage_mode == "mock":
+        return
+
     Path(settings.support_storage_path).mkdir(parents=True, exist_ok=True)
 
 
@@ -63,6 +67,29 @@ def ensure_movement_user_column() -> None:
 
     with engine.begin() as connection:
         connection.execute(text("ALTER TABLE movements ADD COLUMN user_id INTEGER NULL"))
+
+
+def ensure_support_demo_columns() -> None:
+    inspector = inspect(engine)
+
+    if "supports" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("supports")}
+
+    with engine.begin() as connection:
+        if "is_mock" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE supports "
+                    "ADD COLUMN is_mock BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            )
+
+        if "mock_note" not in columns:
+            connection.execute(
+                text("ALTER TABLE supports ADD COLUMN mock_note VARCHAR(255) NULL")
+            )
 
 
 def get_db() -> Generator[Session, None, None]:

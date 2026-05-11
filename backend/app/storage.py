@@ -30,6 +30,10 @@ def save_support_file(upload: UploadFile) -> tuple[str, str]:
     return generated_filename, str(absolute_path)
 
 
+def build_mock_storage_path(filename: str) -> str:
+    return f"mock://supports/{filename}"
+
+
 def resolve_support_file_path(storage_path: str) -> Path:
     path = Path(storage_path)
     if path.is_absolute():
@@ -39,6 +43,9 @@ def resolve_support_file_path(storage_path: str) -> Path:
 
 
 def delete_support_file(storage_path: str) -> None:
+    if storage_path.startswith("mock://"):
+        return
+
     path = resolve_support_file_path(storage_path)
     if path.exists():
         path.unlink()
