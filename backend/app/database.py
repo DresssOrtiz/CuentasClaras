@@ -1,3 +1,5 @@
+import logging
+import time
 from collections.abc import Generator
 from pathlib import Path
 
@@ -11,7 +13,14 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(settings.database_url, future=True)
+logger = logging.getLogger(__name__)
+
+engine = create_engine(
+    settings.database_url,
+    future=True,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 10},
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
@@ -22,6 +31,24 @@ def create_db_and_tables() -> None:
     ensure_movement_review_columns()
     ensure_movement_user_column()
     ensure_support_demo_columns()
+
+
+def initialize_database(max_attempts: int = 6, delay_seconds: int = 2) -> None:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            create_db_and_tables()
+            logger.info("Database initialization completed on attempt %s.", attempt)
+            return
+        except Exception:
+            logger.exception(
+                "Database initialization failed on attempt %s of %s.",
+                attempt,
+                max_attempts,
+            )
+            if attempt == max_attempts:
+                raise
+
+            time.sleep(delay_seconds)
 
 
 def ensure_storage_dirs() -> None:

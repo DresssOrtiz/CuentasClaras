@@ -8,13 +8,13 @@ from app.api.routes.health import router as health_router
 from app.api.routes.movements import router as movements_router
 from app.api.routes.review import router as review_router
 from app.config import settings
-from app.database import create_db_and_tables, ensure_storage_dirs
+from app.database import ensure_storage_dirs, initialize_database
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    create_db_and_tables()
     ensure_storage_dirs()
+    initialize_database()
     yield
 
 
