@@ -17,10 +17,7 @@ services:
           name: cuentas-claras-demo-db
           property: connectionString
       - key: CORS_ALLOWED_ORIGINS
-        fromService:
-          name: cuentas-claras-demo-frontend
-          type: web
-          property: host
+        value: https://cuentas-claras-demo-frontend.onrender.com
       - key: AUTH_SECRET_KEY
         generateValue: true
       - key: SUPPORT_STORAGE_MODE
@@ -34,10 +31,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        fromService:
-          name: cuentas-claras-demo-backend
-          type: web
-          property: host
+        value: https://cuentas-claras-demo-backend.onrender.com
     routes:
       - type: rewrite
         source: /*
