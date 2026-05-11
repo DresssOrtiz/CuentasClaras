@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
@@ -14,6 +15,10 @@ class Base(DeclarativeBase):
 
 
 logger = logging.getLogger(__name__)
+_db_initialized = False
+_db_init_lock = threading.Lock()
+_db_init_error: str | None = None
+_db_init_background_thread: threading.Thread | None = None
 
 engine = create_engine(
     settings.database_url,
@@ -34,14 +39,81 @@ def create_db_and_tables() -> None:
 
 
 def initialize_database(max_attempts: int = 6, delay_seconds: int = 2) -> None:
+    global _db_initialized, _db_init_error
+
+    if _db_initialized:
+        return
+
+    with _db_init_lock:
+        if _db_initialized:
+            return
+
+        _db_init_error = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                create_db_and_tables()
+                _db_initialized = True
+                logger.info("Database initialization completed on attempt %s.", attempt)
+                return
+            except Exception as exc:
+                _db_init_error = str(exc)
+                logger.exception(
+                    "Database initialization failed on attempt %s of %s.",
+                    attempt,
+                    max_attempts,
+                )
+                if attempt == max_attempts:
+                    raise
+
+                time.sleep(delay_seconds)
+
+
+def start_database_initialization_in_background() -> None:
+    global _db_init_background_thread
+
+    if _db_initialized:
+        return
+
+    thread = _db_init_background_thread
+    if thread is not None and thread.is_alive():
+        return
+
+    def run() -> None:
+        try:
+            initialize_database()
+        except Exception:
+            logger.exception("Background database initialization did not complete.")
+
+    _db_init_background_thread = threading.Thread(
+        target=run,
+        name="db-init",
+        daemon=True,
+    )
+    _db_init_background_thread.start()
+
+
+def get_database_initialization_state() -> dict[str, str | bool | None]:
+    thread = _db_init_background_thread
+
+    return {
+        "initialized": _db_initialized,
+        "initializing": bool(thread and thread.is_alive() and not _db_initialized),
+        "last_error": _db_init_error,
+    }
+
+
+def ensure_database_ready(max_attempts: int = 3, delay_seconds: int = 1) -> None:
+    if _db_initialized:
+        return
+
     for attempt in range(1, max_attempts + 1):
         try:
-            create_db_and_tables()
-            logger.info("Database initialization completed on attempt %s.", attempt)
+            initialize_database(max_attempts=1, delay_seconds=0)
             return
         except Exception:
             logger.exception(
-                "Database initialization failed on attempt %s of %s.",
+                "Foreground database initialization attempt %s of %s failed.",
                 attempt,
                 max_attempts,
             )
@@ -120,6 +192,7 @@ def ensure_support_demo_columns() -> None:
 
 
 def get_db() -> Generator[Session, None, None]:
+    ensure_database_ready()
     db = SessionLocal()
     try:
         yield db
