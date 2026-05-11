@@ -5,14 +5,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const frontendPort = Number(env.FRONTEND_PORT ?? "5173");
   const proxyTarget = env.VITE_PROXY_TARGET ?? "http://localhost:8000";
-  const allowedHosts = ["jingling-remember-phoney.ngrok-free.dev"];
 
   return {
     plugins: [react()],
     server: {
       host: "0.0.0.0",
       port: frontendPort,
-      allowedHosts,
       proxy: {
         "/api": {
           target: proxyTarget,
@@ -23,7 +21,6 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       host: "0.0.0.0",
-      allowedHosts,
       port: 4173,
     },
   };

@@ -75,40 +75,8 @@ Este repositorio ya cuenta con un MVP local funcional y con preparacion para un 
 
 ### Frontend
 
-- `VITE_API_URL`: URL base del backend. En local suele ser `http://localhost:8000`. En Render puede apuntar al dominio del backend, por ejemplo `https://tu-backend.onrender.com`.
-- `VITE_PROXY_TARGET`: destino interno que usa Vite para reenviar `/api/*` hacia FastAPI cuando compartes la app con ngrok.
-
-## Compartir Con ngrok
-
-La forma mas practica de compartir esta app sin pagar hosting es exponer solo el frontend con `ngrok` y hacer que Vite proxyee `/api/*` al backend local.
-
-Esto conserva:
-
-- registro
-- login
-- logout
-- movimientos
-- historial
-- estadisticas
-- revision
-- soportes
-
-Configuracion usada:
-
-- frontend local: `http://localhost:5173`
-- backend local: `http://localhost:8000`
-- `VITE_API_URL=/api`
-- `VITE_PROXY_TARGET=http://backend:8000`
-
-Importante:
-
-- no necesitas abrir un tunel publico para el backend
-- compartes un solo link publico: el del frontend
-- el frontend reenvia internamente las llamadas al backend
-
-Segun la documentacion oficial de ngrok, el plan free tiene `1` active endpoint, asi que esta solucion de un solo tunel es la mas practica para hoy:
-
-- [ngrok Free Plan Limits](https://ngrok.com/docs/pricing-limits/free-plan-limits/)
+- `VITE_API_URL`: URL base del backend. En local con Docker Compose se usa `/api` para aprovechar el proxy de Vite. En Render debe apuntar al dominio del backend, por ejemplo `https://tu-backend.onrender.com`.
+- `VITE_PROXY_TARGET`: destino interno que usa Vite solo en desarrollo local para reenviar `/api/*` hacia FastAPI.
 
 ## Desarrollo local con Docker Compose
 
@@ -260,6 +228,17 @@ Esto mantiene persistentes los archivos subidos por movimiento entre deploys y r
    - adjunta un soporte
    - abre y descarga el soporte
    - revisa `Historial`, `Estadisticas` y `Inicio`
+
+### Dominio propio opcional
+
+No necesitas Google ni otro proveedor adicional para publicar la app en Render: cada servicio recibe su URL `onrender.com`.
+
+Solo necesitas un proveedor de dominio si quieres una URL propia como `app.tudominio.com`. En ese caso:
+
+- compras o usas un dominio existente con cualquier registrador
+- agregas el dominio en Render sobre el frontend
+- configuras los registros DNS en tu proveedor
+- verificas el dominio en Render
 
 ### Como conectar frontend y backend en staging
 
