@@ -124,9 +124,6 @@ def ensure_database_ready(max_attempts: int = 3, delay_seconds: int = 1) -> None
 
 
 def ensure_storage_dirs() -> None:
-    if settings.support_storage_mode == "mock":
-        return
-
     Path(settings.support_storage_path).mkdir(parents=True, exist_ok=True)
 
 

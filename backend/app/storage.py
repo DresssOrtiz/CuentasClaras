@@ -21,6 +21,7 @@ def save_support_file(upload: UploadFile) -> tuple[str, str]:
 
     generated_filename = f"{uuid4().hex}{extension}"
     storage_dir = Path(settings.support_storage_path)
+    storage_dir.mkdir(parents=True, exist_ok=True)
     absolute_path = storage_dir / generated_filename
 
     upload.file.seek(0)
